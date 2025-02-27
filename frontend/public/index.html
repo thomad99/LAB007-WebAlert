@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web-Alert Configuration</title>
+    <link rel="stylesheet" href="../src/styles/main.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Web-Alert Configuration</h1>
+        <form id="alertForm">
+            <div class="form-group">
+                <label for="websiteUrl">Website Link:</label>
+                <input type="url" id="websiteUrl" name="websiteUrl" required>
+            </div>
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+            <div class="form-group">
+                <label for="phone">Cell Phone Number:</label>
+                <input type="tel" id="phone" name="phone" required>
+            </div>
+            <div class="form-group">
+                <label for="duration">Duration of Polling (minutes):</label>
+                <input type="number" id="duration" name="duration" min="1" required>
+            </div>
+            <button type="submit">Start Monitoring</button>
+        </form>
+    </div>
+    <script src="../src/js/main.js"></script>
+</body>
+</html> 

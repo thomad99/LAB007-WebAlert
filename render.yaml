@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: web-alert
+    env: node
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_HOST
+        value: dpg-culanb8gph6c73d9jl50-a
+      - key: DB_USER
+        value: sail1
+      - key: DB_PASSWORD
+        value: 5p2GYOeXinvhRvhfOjkK30zItFISFcxs
+      - key: DB_NAME
+        value: sail_exks
+      - key: DB_PORT
+        value: 5432
+      - key: PORT
+        value: 3000
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false 
