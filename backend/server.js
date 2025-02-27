@@ -264,9 +264,16 @@ app.get('/api/test-db', async (req, res) => {
     }
 });
 
-// Add this new test endpoint
-app.post('/api/test-insert', async (req, res) => {
+// Add this near the top after your middleware setup
+app.use((req, res, next) => {
+    console.log(`${req.method} ${req.path} - Request received`);
+    next();
+});
+
+// Modify the test-insert endpoint to explicitly handle GET and POST
+app.get('/api/test-insert', async (req, res) => {
     try {
+        console.log('GET /api/test-insert called');
         const testData = {
             website_url: 'https://test.com',
             email: 'test@test.com',
@@ -274,7 +281,12 @@ app.post('/api/test-insert', async (req, res) => {
             polling_duration: 5
         };
 
-        console.log('Testing direct insert...');
+        // First test the connection
+        console.log('Testing connection...');
+        const connectionTest = await db.query('SELECT NOW()');
+        console.log('Connection test result:', connectionTest.rows[0]);
+
+        console.log('Testing direct insert with data:', testData);
         const result = await db.query(`
             INSERT INTO web_alerts 
                 (website_url, email, phone_number, polling_duration) 
@@ -283,21 +295,76 @@ app.post('/api/test-insert', async (req, res) => {
             RETURNING *
         `, [testData.website_url, testData.email, testData.phone_number, testData.polling_duration]);
 
+        console.log('Insert successful, result:', result.rows[0]);
+
+        // Verify the insert
+        const verify = await db.query('SELECT * FROM web_alerts WHERE id = $1', [result.rows[0].id]);
+        
         res.json({
             success: true,
+            connectionTest: connectionTest.rows[0],
             insertedRow: result.rows[0],
+            verifiedRow: verify.rows[0],
             message: 'Test insert successful'
         });
     } catch (error) {
+        console.error('Test insert failed:', error);
         res.status(500).json({
             success: false,
             error: error.message,
             details: {
                 code: error.code,
-                detail: error.detail
+                detail: error.detail,
+                stack: error.stack
             }
         });
     }
+});
+
+// Also add a POST handler for completeness
+app.post('/api/test-insert', async (req, res) => {
+    // Same handler as GET
+    // ... copy the same code as above ...
+});
+
+// Add this near your other endpoints
+app.get('/api/health', async (req, res) => {
+    try {
+        const dbHealth = await db.checkHealth();
+        const systemInfo = {
+            timestamp: new Date().toISOString(),
+            environment: process.env.NODE_ENV,
+            nodeVersion: process.version,
+            memoryUsage: process.memoryUsage(),
+            uptime: process.uptime(),
+            activeMonitoringTasks: monitoringTasks.size
+        };
+
+        if (dbHealth.status === 'healthy') {
+            res.json({
+                status: 'healthy',
+                database: dbHealth,
+                system: systemInfo
+            });
+        } else {
+            res.status(500).json({
+                status: 'unhealthy',
+                database: dbHealth,
+                system: systemInfo
+            });
+        }
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            error: error.message,
+            stack: error.stack
+        });
+    }
+});
+
+// Add this simple test route
+app.get('/api/test', (req, res) => {
+    res.json({ message: 'Test route working' });
 });
 
 // Error handling middleware
