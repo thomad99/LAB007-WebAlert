@@ -2,7 +2,9 @@ services:
   - type: web
     name: web-alert
     env: node
-    buildCommand: npm install
+    buildCommand: |
+      npm ci
+      npm run build
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -24,8 +26,10 @@ services:
       - key: EMAIL_PASSWORD
         sync: false
       - key: TWILIO_ACCOUNT_SID
-        sync: false
+        value: ACbd3b92b529374514d593d39275a9cc68
       - key: TWILIO_AUTH_TOKEN
-        sync: false
+        value: a9442df0f0aff485d696f8a235cdc73c
       - key: TWILIO_PHONE_NUMBER
-        sync: false 
+        value: "9413269015"
+    healthCheckPath: /
+    autoDeploy: true 
