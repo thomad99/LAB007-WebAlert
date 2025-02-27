@@ -40,8 +40,8 @@ process.on('unhandledRejection', (reason, promise) => {
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from the frontend/public directory
-app.use(express.static(path.join(__dirname, '../frontend/public')));
+// Update the static file serving
+app.use(express.static(path.join(__dirname, '../frontend')));
 
 // Store active monitoring tasks
 const monitoringTasks = new Map();
@@ -74,9 +74,13 @@ db.connect(async (err) => {
     }
 });
 
-// Serve the main HTML page for the root route
+// Add specific routes for HTML files
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/public/index.html'));
+});
+
+app.get('/status.html', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/public/status.html'));
 });
 
 // Keep the health check endpoint
@@ -265,9 +269,9 @@ app.get('/api/test-db', async (req, res) => {
     }
 });
 
-// Add this near the top after your middleware setup
+// Add route logging middleware at the top
 app.use((req, res, next) => {
-    console.log(`${req.method} ${req.path} - Request received`);
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
     next();
 });
 

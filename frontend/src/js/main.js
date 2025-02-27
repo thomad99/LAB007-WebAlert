@@ -1,3 +1,14 @@
+window.onerror = function(msg, url, lineNo, columnNo, error) {
+    console.error('Global error:', {
+        message: msg,
+        url: url,
+        line: lineNo,
+        column: columnNo,
+        error: error
+    });
+    return false;
+};
+
 document.getElementById('alertForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 

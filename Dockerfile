@@ -29,7 +29,7 @@ RUN npm install
 # Copy source
 COPY . .
 
-# Copy frontend files specifically
+# Copy frontend files
 COPY frontend/public ./frontend/public
 COPY frontend/src ./frontend/src
 
