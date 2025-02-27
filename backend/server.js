@@ -19,6 +19,15 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 // Store active monitoring tasks
 const monitoringTasks = new Map();
 
+// Test database connection
+db.connect((err) => {
+    if (err) {
+        console.error('Database connection error:', err);
+    } else {
+        console.log('Database connected successfully');
+    }
+});
+
 // API endpoint to start monitoring
 app.post('/api/monitor', async (req, res) => {
     const { websiteUrl, email, phone, duration } = req.body;
@@ -75,7 +84,15 @@ app.post('/api/monitor', async (req, res) => {
     }
 });
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+    console.error(err.stack);
+    res.status(500).send('Something broke!');
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on port ${PORT}`);
+}).on('error', (err) => {
+    console.error('Server failed to start:', err);
 }); 
