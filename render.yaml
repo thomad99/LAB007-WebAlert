@@ -3,10 +3,7 @@ services:
     name: web-alert
     env: docker
     dockerCommand: node backend/server.js
-    buildCommand: |
-      apt-get update -y && \
-      apt-get install -y chromium chromium-driver && \
-      npm install
+    buildCommand: npm install
     envVars:
       - key: NODE_ENV
         value: production
