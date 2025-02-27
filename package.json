@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node backend/server.js",
     "dev": "nodemon backend/server.js",
-    "postinstall": "npm install --production"
+    "build": "echo 'No build step required'"
   },
   "dependencies": {
     "express": "^4.18.2",
