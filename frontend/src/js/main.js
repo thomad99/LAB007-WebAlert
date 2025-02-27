@@ -9,10 +9,19 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
         duration: parseInt(document.getElementById('duration').value)
     };
 
-    statusBox.innerHTML = 'Starting monitoring...';
+    // Show the data being sent
+    statusBox.innerHTML = `
+        <p>⏳ Sending request with:</p>
+        <p>🔗 URL: ${formData.websiteUrl}</p>
+        <p>📧 Email: ${formData.email}</p>
+        <p>📱 Phone: ${formData.phone}</p>
+        <p>⏱️ Duration: ${formData.duration} minutes</p>
+    `;
     document.getElementById('statusBox').classList.add('status-active');
 
     try {
+        statusBox.innerHTML += '<p>📡 Connecting to server...</p>';
+        
         const response = await fetch('/api/monitor', {
             method: 'POST',
             headers: {
@@ -21,22 +30,31 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
             body: JSON.stringify(formData)
         });
 
+        statusBox.innerHTML += '<p>⌛ Processing response...</p>';
+        
         const data = await response.json();
+        
         if (response.ok) {
             statusBox.innerHTML = `
-                <p>✅ Monitoring started successfully!</p>
-                <p>Monitoring URL: ${formData.websiteUrl}</p>
-                <p>Duration: ${formData.duration} minutes</p>
-                <p>Notifications will be sent to:</p>
-                <p>📧 ${formData.email}</p>
-                <p>📱 ${formData.phone}</p>
+                <p>✅ Success! Monitoring started</p>
+                <p>🆔 Alert ID: ${data.alertId}</p>
+                <p>🔗 URL: ${formData.websiteUrl}</p>
+                <p>⏱️ Duration: ${formData.duration} minutes</p>
+                <p>📧 Email: ${formData.email}</p>
+                <p>📱 Phone: ${formatPhoneNumber(formData.phone)}</p>
+                <p>🔄 First check will begin in about 1 minute</p>
+                <p><a href="/status.html" class="status-link">View All Monitoring Tasks</a></p>
             `;
             e.target.reset();
         } else {
             throw new Error(data.error || 'Failed to start monitoring');
         }
     } catch (error) {
-        statusBox.innerHTML = `❌ Error: ${error.message}`;
+        statusBox.innerHTML = `
+            <p>❌ Error occurred:</p>
+            <p>${error.message}</p>
+            <p>Please try again or contact support if the problem persists.</p>
+        `;
         document.getElementById('statusBox').classList.remove('status-active');
     }
 });

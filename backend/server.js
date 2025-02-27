@@ -84,39 +84,50 @@ app.get('/health', (req, res) => {
 // API endpoint to start monitoring
 app.post('/api/monitor', async (req, res) => {
     const { websiteUrl, email, phone, duration } = req.body;
+    console.log('Received monitoring request:', { websiteUrl, email, phone, duration });
 
     try {
         // Insert new monitoring request into database
+        console.log('Attempting to insert into database...');
         const result = await db.query(
             'INSERT INTO web_alerts (website_url, email, phone_number, polling_duration) VALUES ($1, $2, $3, $4) RETURNING id',
             [websiteUrl, email, phone, duration]
         );
+        console.log('Database insert successful, ID:', result.rows[0].id);
 
         const alertId = result.rows[0].id;
         let checkCount = 0;
         let previousContent = null;
 
         // Create monitoring task
+        console.log('Setting up monitoring task for alert ID:', alertId);
         const task = cron.schedule('* * * * *', async () => {
             try {
                 checkCount++;
+                console.log(`Running check ${checkCount}/${duration} for alert ID ${alertId}`);
+                
                 const content = await scraper.scrape(websiteUrl);
+                console.log(`Content fetched for ${websiteUrl}, length: ${content.length} characters`);
 
                 if (previousContent && content !== previousContent) {
+                    console.log('Change detected, sending notifications...');
                     await Promise.all([
                         emailService.sendAlert(email, websiteUrl),
                         smsService.sendAlert(phone, websiteUrl)
                     ]);
+                    console.log('Notifications sent successfully');
 
                     await db.query(
                         'UPDATE web_alerts SET last_check = NOW(), last_content = $1 WHERE id = $2',
                         [content, alertId]
                     );
+                    console.log('Database updated with new content');
                 }
 
                 previousContent = content;
 
                 if (checkCount >= duration) {
+                    console.log(`Monitoring complete for alert ID ${alertId}`);
                     task.stop();
                     monitoringTasks.delete(alertId);
                     await db.query(
@@ -125,15 +136,32 @@ app.post('/api/monitor', async (req, res) => {
                     );
                 }
             } catch (error) {
-                console.error('Error in monitoring task:', error);
+                console.error(`Error in monitoring task for alert ID ${alertId}:`, error);
             }
         });
 
         monitoringTasks.set(alertId, task);
-        res.json({ message: 'Monitoring started successfully', alertId });
+        console.log('Monitoring task created and stored');
+        
+        res.json({ 
+            message: 'Monitoring started successfully', 
+            alertId,
+            debug: {
+                taskCreated: true,
+                taskStored: monitoringTasks.has(alertId),
+                activeTasksCount: monitoringTasks.size
+            }
+        });
     } catch (error) {
         console.error('Error starting monitoring:', error);
-        res.status(500).json({ error: 'Failed to start monitoring' });
+        res.status(500).json({ 
+            error: 'Failed to start monitoring',
+            details: error.message,
+            debug: {
+                errorType: error.name,
+                errorStack: error.stack
+            }
+        });
     }
 });
 

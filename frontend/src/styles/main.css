@@ -136,4 +136,24 @@ button:hover {
 
 .status-link:hover {
     background-color: #004d99;
+}
+
+.status-box p {
+    margin: 8px 0;
+    line-height: 1.4;
+}
+
+.status-box a.status-link {
+    display: inline-block;
+    margin-top: 15px;
+    background-color: #0066cc;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: background-color 0.3s ease;
+}
+
+.status-box a.status-link:hover {
+    background-color: #004d99;
 } 
