@@ -11,21 +11,49 @@ const pool = new Pool({
     }
 });
 
+// Test the pool immediately
+pool.query('SELECT NOW()', (err, res) => {
+    if (err) {
+        console.error('Initial pool test failed:', err);
+    } else {
+        console.log('Pool initialized successfully, timestamp:', res.rows[0].now);
+    }
+});
+
+const query = async (text, params) => {
+    const start = Date.now();
+    try {
+        console.log('DB Query starting:', {
+            text,
+            params,
+            stack: new Error().stack.split('\n').slice(2).join('\n')
+        });
+        
+        const res = await pool.query(text, params);
+        
+        const duration = Date.now() - start;
+        console.log('DB Query complete:', {
+            text,
+            duration,
+            rows: res.rows.length,
+            result: res.rows
+        });
+        
+        return res;
+    } catch (err) {
+        console.error('DB Query failed:', {
+            text,
+            params,
+            error: err.message,
+            code: err.code,
+            detail: err.detail
+        });
+        throw err;
+    }
+};
+
 module.exports = {
-    query: (text, params) => {
-        console.log('Executing query:', { text, params });
-        return pool.query(text, params)
-            .then(res => {
-                console.log('Query successful:', res.rowCount, 'rows affected');
-                return res;
-            })
-            .catch(err => {
-                console.error('Query failed:', err);
-                throw err;
-            });
-    },
-    connect: (callback) => {
-        return pool.connect(callback);
-    },
+    query,
+    connect: (callback) => pool.connect(callback),
     pool
 }; 

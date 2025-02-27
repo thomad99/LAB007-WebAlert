@@ -91,35 +91,51 @@ app.get('/health', (req, res) => {
 
 // API endpoint to start monitoring
 app.post('/api/monitor', async (req, res) => {
+    console.log('POST /api/monitor received:', req.body);
+    
     const { websiteUrl, email, phone, duration } = req.body;
-    console.log('Received monitoring request:', { websiteUrl, email, phone, duration });
+    
+    if (!websiteUrl || !email || !phone || !duration) {
+        console.error('Missing required fields:', { websiteUrl, email, phone, duration });
+        return res.status(400).json({ 
+            error: 'Missing required fields',
+            received: { websiteUrl, email, phone, duration }
+        });
+    }
 
     try {
-        // Test database connection first
+        // Test connection first
         console.log('Testing database connection...');
-        await db.query('SELECT NOW()');
-        console.log('Database connection test successful');
+        const testResult = await db.query('SELECT NOW() as time');
+        console.log('Database test successful:', testResult.rows[0]);
 
-        // Insert new monitoring request into database
-        console.log('Attempting to insert into database with values:', [websiteUrl, email, phone, duration]);
-        const result = await db.query(
-            'INSERT INTO web_alerts (website_url, email, phone_number, polling_duration) VALUES ($1, $2, $3, $4) RETURNING *',
-            [websiteUrl, email, phone, duration]
-        );
+        // Insert the monitoring request
+        console.log('Inserting monitoring request...');
+        const insertQuery = `
+            INSERT INTO web_alerts 
+                (website_url, email, phone_number, polling_duration) 
+            VALUES 
+                ($1, $2, $3, $4) 
+            RETURNING *`;
         
-        console.log('Insert result:', result);
-        console.log('Inserted row:', result.rows[0]);
+        const values = [websiteUrl, email, phone, duration];
+        console.log('Insert query:', { query: insertQuery, values });
 
+        const result = await db.query(insertQuery, values);
+        
         if (!result.rows[0]) {
-            throw new Error('Insert succeeded but no row was returned');
+            throw new Error('Insert did not return the created row');
         }
 
-        const alertId = result.rows[0].id;
+        const newAlert = result.rows[0];
+        console.log('Successfully inserted alert:', newAlert);
+
+        // Set up monitoring task
+        const alertId = newAlert.id;
         let checkCount = 0;
         let previousContent = null;
 
-        // Create monitoring task
-        console.log('Setting up monitoring task for alert ID:', alertId);
+        console.log('Setting up cron task for alert:', alertId);
         const task = cron.schedule('* * * * *', async () => {
             try {
                 checkCount++;
@@ -160,38 +176,40 @@ app.post('/api/monitor', async (req, res) => {
         });
 
         monitoringTasks.set(alertId, task);
-        console.log('Monitoring task created and stored');
-        
-        res.json({ 
-            message: 'Monitoring started successfully', 
-            alertId,
+        console.log('Monitoring task created:', { alertId, taskCount: monitoringTasks.size });
+
+        // Verify the insert with a select
+        const verify = await db.query('SELECT * FROM web_alerts WHERE id = $1', [alertId]);
+        console.log('Verification query result:', verify.rows[0]);
+
+        return res.json({
+            message: 'Monitoring started successfully',
+            alert: newAlert,
             debug: {
                 taskCreated: true,
                 taskStored: monitoringTasks.has(alertId),
-                activeTasksCount: monitoringTasks.size
+                activeTasksCount: monitoringTasks.size,
+                verificationResult: verify.rows[0] ? 'found' : 'not found'
             }
         });
+
     } catch (error) {
-        console.error('Detailed error:', {
-            message: error.message,
+        console.error('Error in /api/monitor:', {
+            error: error.message,
             stack: error.stack,
             code: error.code,
-            detail: error.detail,
-            table: error.table,
-            constraint: error.constraint
+            detail: error.detail
         });
-        
-        res.status(500).json({ 
+
+        return res.status(500).json({
             error: 'Failed to start monitoring',
             details: error.message,
             debug: {
                 errorType: error.name,
-                errorStack: error.stack,
                 errorCode: error.code,
                 errorDetail: error.detail
             }
         });
-        return;
     }
 });
 
@@ -233,6 +251,42 @@ app.get('/api/test-db', async (req, res) => {
                 database: process.env.DB_NAME,
                 port: process.env.DB_PORT
             }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            details: {
+                code: error.code,
+                detail: error.detail
+            }
+        });
+    }
+});
+
+// Add this new test endpoint
+app.post('/api/test-insert', async (req, res) => {
+    try {
+        const testData = {
+            website_url: 'https://test.com',
+            email: 'test@test.com',
+            phone_number: '1234567890',
+            polling_duration: 5
+        };
+
+        console.log('Testing direct insert...');
+        const result = await db.query(`
+            INSERT INTO web_alerts 
+                (website_url, email, phone_number, polling_duration) 
+            VALUES 
+                ($1, $2, $3, $4) 
+            RETURNING *
+        `, [testData.website_url, testData.email, testData.phone_number, testData.polling_duration]);
+
+        res.json({
+            success: true,
+            insertedRow: result.rows[0],
+            message: 'Test insert successful'
         });
     } catch (error) {
         res.status(500).json({
