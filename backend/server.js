@@ -31,7 +31,9 @@ process.on('unhandledRejection', (reason, promise) => {
 
 app.use(cors());
 app.use(express.json());
-app.use(express.static(path.join(__dirname, '../frontend')));
+
+// Serve static files from the frontend/public directory
+app.use(express.static(path.join(__dirname, '../frontend/public')));
 
 // Store active monitoring tasks
 const monitoringTasks = new Map();
@@ -45,12 +47,12 @@ db.connect((err) => {
     }
 });
 
-// Add a basic health check endpoint
+// Serve the main HTML page for the root route
 app.get('/', (req, res) => {
-    res.send('Server is running');
+    res.sendFile(path.join(__dirname, '../frontend/public/index.html'));
 });
 
-// Add after your database connection test
+// Keep the health check endpoint
 app.get('/health', (req, res) => {
     res.json({
         status: 'ok',
