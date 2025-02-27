@@ -3,9 +3,14 @@ const puppeteer = require('puppeteer');
 async function scrape(url) {
     console.log('Starting scrape for URL:', url);
     let browser = null;
+    let debugInfo = {
+        steps: [],
+        content: null,
+        error: null
+    };
+
     try {
-        // Launch browser with specific args for running in container
-        console.log('Launching browser...');
+        debugInfo.steps.push('Launching browser...');
         browser = await puppeteer.launch({
             args: [
                 '--no-sandbox',
@@ -18,51 +23,78 @@ async function scrape(url) {
             headless: 'new',
             executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
         });
+        debugInfo.steps.push('Browser launched successfully');
 
-        // Create a new page
-        console.log('Creating new page...');
+        debugInfo.steps.push('Creating new page...');
         const page = await browser.newPage();
+        
+        // Enable request interception for debugging
+        await page.setRequestInterception(true);
+        page.on('request', request => {
+            debugInfo.steps.push(`Request: ${request.method()} ${request.url()}`);
+            request.continue();
+        });
 
-        // Set viewport
+        page.on('console', msg => {
+            debugInfo.steps.push(`Console: ${msg.text()}`);
+        });
+
+        page.on('error', err => {
+            debugInfo.steps.push(`Page error: ${err.message}`);
+        });
+
+        debugInfo.steps.push('Setting viewport...');
         await page.setViewport({ width: 1920, height: 1080 });
 
-        // Navigate to URL with timeout
-        console.log('Navigating to URL...');
-        await page.goto(url, {
+        debugInfo.steps.push(`Navigating to ${url}...`);
+        const response = await page.goto(url, {
             waitUntil: 'networkidle0',
             timeout: 30000
         });
+        debugInfo.steps.push(`Page loaded with status: ${response.status()}`);
 
-        // Wait for content to load
-        console.log('Waiting for content to load...');
+        debugInfo.steps.push('Waiting for body...');
         await page.waitForSelector('body');
 
-        // Get the page content
-        console.log('Extracting content...');
+        debugInfo.steps.push('Taking screenshot...');
+        const screenshot = await page.screenshot({ encoding: 'base64' });
+        debugInfo.screenshot = `data:image/png;base64,${screenshot}`;
+
+        debugInfo.steps.push('Extracting content...');
         const content = await page.evaluate(() => {
-            // Remove scripts, styles, and other non-content elements
             const elementsToRemove = document.querySelectorAll('script, style, iframe, noscript');
             elementsToRemove.forEach(el => el.remove());
-
-            // Get the text content
-            return document.body.innerText;
+            return {
+                text: document.body.innerText,
+                html: document.body.innerHTML
+            };
         });
 
-        console.log(`Content extracted, length: ${content.length} characters`);
-        console.log('Sample of content:', content.substring(0, 200) + '...');
+        debugInfo.content = content;
+        debugInfo.steps.push(`Content extracted, text length: ${content.text.length}`);
 
-        return content;
+        return {
+            content: content.text,
+            debug: debugInfo
+        };
     } catch (error) {
+        debugInfo.error = {
+            message: error.message,
+            stack: error.stack
+        };
+        debugInfo.steps.push(`Error: ${error.message}`);
         console.error('Error in scraper:', {
             url,
             error: error.message,
-            stack: error.stack
+            stack: error.stack,
+            debug: debugInfo
         });
         throw error;
     } finally {
         if (browser) {
-            console.log('Closing browser...');
+            debugInfo.steps.push('Closing browser...');
             await browser.close();
+            debugInfo.steps.push('Browser closed');
         }
     }
 }

@@ -61,6 +61,7 @@ db.connect(async (err) => {
                     email VARCHAR(255) NOT NULL,
                     phone_number VARCHAR(20) NOT NULL,
                     polling_duration INTEGER NOT NULL,
+                    check_count INTEGER DEFAULT 0,
                     last_check TIMESTAMP,
                     last_content TEXT,
                     is_active BOOLEAN DEFAULT true,
@@ -158,13 +159,14 @@ app.post('/api/monitor', async (req, res) => {
                 checkCount++;
                 console.log(`Running check ${checkCount}/${duration} for alert ID ${alertId}`);
                 
-                const content = await scraper.scrape(websiteUrl);
-                console.log(`Content fetched for ${websiteUrl}:`, {
-                    length: content.length,
-                    sample: content.substring(0, 100) + '...',
-                    previousLength: previousContent ? previousContent.length : 0,
-                    hasPreviousContent: !!previousContent
-                });
+                // Update check count in database
+                await db.query(
+                    'UPDATE web_alerts SET check_count = check_count + 1 WHERE id = $1',
+                    [alertId]
+                );
+
+                const { content, debug } = await scraper.scrape(websiteUrl);
+                console.log('Scrape debug info:', debug);
 
                 if (previousContent) {
                     const contentChanged = content !== previousContent;
@@ -195,8 +197,8 @@ app.post('/api/monitor', async (req, res) => {
                         console.log('Notifications sent successfully');
 
                         await db.query(
-                            'UPDATE web_alerts SET last_check = NOW(), last_content = $1 WHERE id = $2',
-                            [content, alertId]
+                            'UPDATE web_alerts SET last_check = NOW(), last_content = $1, last_debug = $2 WHERE id = $3',
+                            [content, JSON.stringify(debug), alertId]
                         );
                         console.log('Database updated with new content');
                     }
@@ -275,6 +277,7 @@ app.get('/api/status', async (req, res) => {
                 email,
                 phone_number,
                 polling_duration,
+                check_count,
                 last_check,
                 is_active,
                 created_at,
@@ -439,6 +442,66 @@ app.get('/api/alerts-history/:alertId', async (req, res) => {
     } catch (error) {
         console.error('Error fetching alert history:', error);
         res.status(500).json({ error: 'Failed to fetch alert history' });
+    }
+});
+
+// Add this new endpoint to view scraped content
+app.get('/api/content/:alertId', async (req, res) => {
+    try {
+        const { alertId } = req.params;
+        
+        // Get current content
+        const currentContent = await db.query(`
+            SELECT website_url, last_content, last_check 
+            FROM web_alerts 
+            WHERE id = $1
+        `, [alertId]);
+
+        // Get content history
+        const contentHistory = await db.query(`
+            SELECT 
+                detected_at,
+                content_before,
+                content_after
+            FROM alerts_history 
+            WHERE alert_id = $1 
+            ORDER BY detected_at DESC
+        `, [alertId]);
+
+        res.json({
+            current: currentContent.rows[0] || null,
+            history: contentHistory.rows || []
+        });
+    } catch (error) {
+        console.error('Error fetching content:', error);
+        res.status(500).json({ error: 'Failed to fetch content history' });
+    }
+});
+
+// Add this new endpoint for debug view
+app.get('/api/debug/:alertId', async (req, res) => {
+    try {
+        const { alertId } = req.params;
+        const result = await db.query(`
+            SELECT 
+                website_url,
+                last_check,
+                last_content,
+                last_debug,
+                check_count,
+                polling_duration
+            FROM web_alerts 
+            WHERE id = $1
+        `, [alertId]);
+
+        if (!result.rows[0]) {
+            return res.status(404).json({ error: 'Alert not found' });
+        }
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Error fetching debug info:', error);
+        res.status(500).json({ error: 'Failed to fetch debug info' });
     }
 });
 
