@@ -467,9 +467,25 @@ app.use((err, req, res, next) => {
     res.status(500).send('Something broke!');
 });
 
+// Modify the server startup
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
+const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running on port ${PORT}`);
+    console.log('Environment:', process.env.NODE_ENV);
+    console.log('Database host:', process.env.DB_HOST);
+    console.log('Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
+    console.log('Current working directory:', process.cwd());
+    console.log('Directory contents:', require('fs').readdirSync('.'));
 }).on('error', (err) => {
     console.error('Server failed to start:', err);
+    process.exit(1);
+});
+
+// Add graceful shutdown
+process.on('SIGTERM', () => {
+    console.log('SIGTERM received. Shutting down gracefully...');
+    server.close(() => {
+        console.log('Server closed');
+        process.exit(0);
+    });
 }); 

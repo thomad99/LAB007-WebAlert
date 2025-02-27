@@ -29,25 +29,24 @@ RUN npm install
 # Copy source
 COPY . .
 
-# Copy frontend files
-COPY frontend/public ./frontend/public
-COPY frontend/src ./frontend/src
+# Ensure proper permissions for Chrome
+RUN mkdir -p /app/.cache/puppeteer && \
+    chown -R node:node /app
 
-# Add user so we don't need --no-sandbox
-RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
-    && mkdir -p /home/pptruser/Downloads \
-    && chown -R pptruser:pptruser /home/pptruser \
-    && chown -R pptruser:pptruser /app
-
-# Run everything after as non-privileged user
-USER pptruser
+# Switch to non-root user
+USER node
 
 # Set environment variables
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome \
+    NODE_ENV=production
 
 # Expose port
 EXPOSE 3000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health || exit 1
 
 # Start the application
 CMD ["node", "backend/server.js"] 
