@@ -20,6 +20,7 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
     document.getElementById('statusBox').classList.add('status-active');
 
     try {
+        console.log('Sending form data:', formData);
         statusBox.innerHTML += '<p>📡 Connecting to server...</p>';
         
         const response = await fetch('/api/monitor', {
@@ -33,11 +34,12 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
         statusBox.innerHTML += '<p>⌛ Processing response...</p>';
         
         const data = await response.json();
+        console.log('Server response:', data);
         
         if (response.ok) {
             statusBox.innerHTML = `
                 <p>✅ Success! Monitoring started</p>
-                <p>🆔 Alert ID: ${data.alertId}</p>
+                <p>🆔 Alert ID: ${data.alert.id}</p>
                 <p>🔗 URL: ${formData.websiteUrl}</p>
                 <p>⏱️ Duration: ${formData.duration} minutes</p>
                 <p>📧 Email: ${formData.email}</p>
@@ -50,6 +52,7 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
             throw new Error(data.error || 'Failed to start monitoring');
         }
     } catch (error) {
+        console.error('Form submission error:', error);
         statusBox.innerHTML = `
             <p>❌ Error occurred:</p>
             <p>${error.message}</p>

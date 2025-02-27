@@ -213,9 +213,10 @@ app.post('/api/monitor', async (req, res) => {
     }
 });
 
-// Add this new route after your existing routes
+// Modify the status endpoint
 app.get('/api/status', async (req, res) => {
     try {
+        console.log('Fetching status from database...');
         const result = await db.query(`
             SELECT 
                 id,
@@ -228,9 +229,9 @@ app.get('/api/status', async (req, res) => {
                 created_at,
                 EXTRACT(EPOCH FROM (created_at + (polling_duration || ' minutes')::interval) - NOW())/60 as minutes_left
             FROM web_alerts
-            WHERE is_active = true
             ORDER BY created_at DESC
         `);
+        console.log('Status query result:', result.rows);
         res.json(result.rows);
     } catch (error) {
         console.error('Error fetching status:', error);

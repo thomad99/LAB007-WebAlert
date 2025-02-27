@@ -1,7 +1,10 @@
 async function fetchStatus() {
     try {
+        console.log('Fetching status...');
         const response = await fetch('/api/status');
+        console.log('Status response received');
         const data = await response.json();
+        console.log('Status data:', data);
         
         const monitoringList = document.getElementById('monitoringList');
         
@@ -54,6 +57,18 @@ function formatPhoneNumber(phone) {
     return phone;
 }
 
-// Fetch status immediately and then every 30 seconds
+// Add this test function
+async function testDatabaseConnection() {
+    try {
+        const response = await fetch('/api/health');
+        const data = await response.json();
+        console.log('Database health check:', data);
+    } catch (error) {
+        console.error('Health check failed:', error);
+    }
+}
+
+// Call both functions
+testDatabaseConnection();
 fetchStatus();
 setInterval(fetchStatus, 30000); 
