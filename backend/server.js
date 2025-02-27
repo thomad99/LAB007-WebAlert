@@ -118,6 +118,31 @@ app.post('/api/monitor', async (req, res) => {
     }
 });
 
+// Add this new route after your existing routes
+app.get('/api/status', async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT 
+                id,
+                website_url,
+                email,
+                phone_number,
+                polling_duration,
+                last_check,
+                is_active,
+                created_at,
+                EXTRACT(EPOCH FROM (created_at + (polling_duration || ' minutes')::interval) - NOW())/60 as minutes_left
+            FROM web_alerts
+            WHERE is_active = true
+            ORDER BY created_at DESC
+        `);
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching status:', error);
+        res.status(500).json({ error: 'Failed to fetch monitoring status' });
+    }
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
     console.error(err.stack);

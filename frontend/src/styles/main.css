@@ -115,4 +115,25 @@ button:hover {
     input, button {
         font-size: 1em;
     }
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+}
+
+.status-link {
+    background-color: #0066cc;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: background-color 0.3s ease;
+}
+
+.status-link:hover {
+    background-color: #004d99;
 } 
