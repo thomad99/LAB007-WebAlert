@@ -12,6 +12,21 @@ const emailService = require('./services/emailService');
 const smsService = require('./services/smsService');
 
 const app = express();
+
+// Add more detailed logging
+console.log('Starting server...');
+console.log('Environment:', process.env.NODE_ENV);
+console.log('Database host:', process.env.DB_HOST);
+
+// Basic error handling
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+});
+
+process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Rejection:', err);
+});
+
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
@@ -26,6 +41,11 @@ db.connect((err) => {
     } else {
         console.log('Database connected successfully');
     }
+});
+
+// Add a basic health check endpoint
+app.get('/', (req, res) => {
+    res.send('Server is running');
 });
 
 // API endpoint to start monitoring
