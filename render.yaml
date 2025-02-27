@@ -16,7 +16,7 @@ services:
       - key: DB_NAME
         value: sail_exks
       - key: DB_PORT
-        value: 5432
+        value: "5432"
       - key: PORT
         value: 3000
       - key: EMAIL_USER

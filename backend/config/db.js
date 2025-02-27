@@ -1,14 +1,31 @@
 const { Pool } = require('pg');
 
 const pool = new Pool({
-    host: process.env.DB_HOST || 'dpg-culanb8gph6c73d9jl50-a',
-    user: process.env.DB_USER || 'sail1',
-    password: process.env.DB_PASSWORD || '5p2GYOeXinvhRvhfOjkK30zItFISFcxs',
-    database: process.env.DB_NAME || 'sail_exks',
-    port: parseInt(process.env.DB_PORT || '5432'),
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    port: process.env.DB_PORT,
     ssl: {
         rejectUnauthorized: false
     }
 });
 
-module.exports = pool; 
+module.exports = {
+    query: (text, params) => {
+        console.log('Executing query:', { text, params });
+        return pool.query(text, params)
+            .then(res => {
+                console.log('Query successful:', res.rowCount, 'rows affected');
+                return res;
+            })
+            .catch(err => {
+                console.error('Query failed:', err);
+                throw err;
+            });
+    },
+    connect: (callback) => {
+        return pool.connect(callback);
+    },
+    pool
+}; 

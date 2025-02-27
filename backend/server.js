@@ -18,6 +18,14 @@ console.log('Starting server...');
 console.log('Environment:', process.env.NODE_ENV);
 console.log('Database host:', process.env.DB_HOST);
 
+// Add near the top after imports
+console.log('Database configuration:', {
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    database: process.env.DB_NAME,
+    port: process.env.DB_PORT
+});
+
 // Basic error handling
 process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err);
@@ -87,13 +95,24 @@ app.post('/api/monitor', async (req, res) => {
     console.log('Received monitoring request:', { websiteUrl, email, phone, duration });
 
     try {
+        // Test database connection first
+        console.log('Testing database connection...');
+        await db.query('SELECT NOW()');
+        console.log('Database connection test successful');
+
         // Insert new monitoring request into database
-        console.log('Attempting to insert into database...');
+        console.log('Attempting to insert into database with values:', [websiteUrl, email, phone, duration]);
         const result = await db.query(
-            'INSERT INTO web_alerts (website_url, email, phone_number, polling_duration) VALUES ($1, $2, $3, $4) RETURNING id',
+            'INSERT INTO web_alerts (website_url, email, phone_number, polling_duration) VALUES ($1, $2, $3, $4) RETURNING *',
             [websiteUrl, email, phone, duration]
         );
-        console.log('Database insert successful, ID:', result.rows[0].id);
+        
+        console.log('Insert result:', result);
+        console.log('Inserted row:', result.rows[0]);
+
+        if (!result.rows[0]) {
+            throw new Error('Insert succeeded but no row was returned');
+        }
 
         const alertId = result.rows[0].id;
         let checkCount = 0;
@@ -153,15 +172,26 @@ app.post('/api/monitor', async (req, res) => {
             }
         });
     } catch (error) {
-        console.error('Error starting monitoring:', error);
+        console.error('Detailed error:', {
+            message: error.message,
+            stack: error.stack,
+            code: error.code,
+            detail: error.detail,
+            table: error.table,
+            constraint: error.constraint
+        });
+        
         res.status(500).json({ 
             error: 'Failed to start monitoring',
             details: error.message,
             debug: {
                 errorType: error.name,
-                errorStack: error.stack
+                errorStack: error.stack,
+                errorCode: error.code,
+                errorDetail: error.detail
             }
         });
+        return;
     }
 });
 
@@ -187,6 +217,32 @@ app.get('/api/status', async (req, res) => {
     } catch (error) {
         console.error('Error fetching status:', error);
         res.status(500).json({ error: 'Failed to fetch monitoring status' });
+    }
+});
+
+// Add a test endpoint
+app.get('/api/test-db', async (req, res) => {
+    try {
+        const result = await db.query('SELECT NOW()');
+        res.json({
+            success: true,
+            timestamp: result.rows[0].now,
+            dbConfig: {
+                host: process.env.DB_HOST,
+                user: process.env.DB_USER,
+                database: process.env.DB_NAME,
+                port: process.env.DB_PORT
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            details: {
+                code: error.code,
+                detail: error.detail
+            }
+        });
     }
 });
 
