@@ -53,7 +53,7 @@ db.connect(async (err) => {
     } else {
         console.log('Database connected successfully');
         try {
-            // Create tables if they don't exist
+            // Create web_alerts table if it doesn't exist
             await db.query(`
                 CREATE TABLE IF NOT EXISTS web_alerts (
                     id SERIAL PRIMARY KEY,
@@ -65,6 +65,19 @@ db.connect(async (err) => {
                     last_content TEXT,
                     is_active BOOLEAN DEFAULT true,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            `);
+
+            // Create alerts_history table
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS alerts_history (
+                    id SERIAL PRIMARY KEY,
+                    alert_id INTEGER REFERENCES web_alerts(id),
+                    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    email_sent BOOLEAN DEFAULT false,
+                    sms_sent BOOLEAN DEFAULT false,
+                    content_before TEXT,
+                    content_after TEXT
                 );
             `);
             console.log('Database schema initialized');
@@ -146,24 +159,58 @@ app.post('/api/monitor', async (req, res) => {
                 console.log(`Running check ${checkCount}/${duration} for alert ID ${alertId}`);
                 
                 const content = await scraper.scrape(websiteUrl);
-                console.log(`Content fetched for ${websiteUrl}, length: ${content.length} characters`);
+                console.log(`Content fetched for ${websiteUrl}:`, {
+                    length: content.length,
+                    sample: content.substring(0, 100) + '...',
+                    previousLength: previousContent ? previousContent.length : 0,
+                    hasPreviousContent: !!previousContent
+                });
 
-                if (previousContent && content !== previousContent) {
-                    console.log('Change detected, sending notifications...');
-                    await Promise.all([
-                        emailService.sendAlert(email, websiteUrl),
-                        smsService.sendAlert(phone, websiteUrl)
-                    ]);
-                    console.log('Notifications sent successfully');
+                if (previousContent) {
+                    const contentChanged = content !== previousContent;
+                    console.log('Content comparison:', {
+                        contentChanged,
+                        currentLength: content.length,
+                        previousLength: previousContent.length,
+                        firstDifference: contentChanged ? findFirstDifference(content, previousContent) : null
+                    });
 
-                    await db.query(
-                        'UPDATE web_alerts SET last_check = NOW(), last_content = $1 WHERE id = $2',
-                        [content, alertId]
-                    );
-                    console.log('Database updated with new content');
+                    if (contentChanged) {
+                        console.log('Change detected, sending notifications...');
+                        
+                        // Record the alert
+                        const alertRecord = await db.query(`
+                            INSERT INTO alerts_history 
+                                (alert_id, content_before, content_after, email_sent, sms_sent) 
+                            VALUES ($1, $2, $3, $4, $4) 
+                            RETURNING *
+                        `, [alertId, previousContent, content, true]);
+                        
+                        console.log('Alert recorded:', alertRecord.rows[0]);
+
+                        await Promise.all([
+                            emailService.sendAlert(email, websiteUrl),
+                            smsService.sendAlert(phone, websiteUrl)
+                        ]);
+                        console.log('Notifications sent successfully');
+
+                        await db.query(
+                            'UPDATE web_alerts SET last_check = NOW(), last_content = $1 WHERE id = $2',
+                            [content, alertId]
+                        );
+                        console.log('Database updated with new content');
+                    }
+                } else {
+                    console.log('First check - storing initial content');
                 }
 
                 previousContent = content;
+
+                // Update last_check even if content hasn't changed
+                await db.query(
+                    'UPDATE web_alerts SET last_check = NOW() WHERE id = $1',
+                    [alertId]
+                );
 
                 if (checkCount >= duration) {
                     console.log(`Monitoring complete for alert ID ${alertId}`);
@@ -371,6 +418,48 @@ app.get('/api/health', async (req, res) => {
 app.get('/api/test', (req, res) => {
     res.json({ message: 'Test route working' });
 });
+
+// Add this new endpoint
+app.get('/api/alerts-history/:alertId', async (req, res) => {
+    try {
+        const { alertId } = req.params;
+        const result = await db.query(`
+            SELECT 
+                ah.*,
+                wa.website_url,
+                wa.email,
+                wa.phone_number
+            FROM alerts_history ah
+            JOIN web_alerts wa ON wa.id = ah.alert_id
+            WHERE ah.alert_id = $1
+            ORDER BY ah.detected_at DESC
+        `, [alertId]);
+        
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Error fetching alert history:', error);
+        res.status(500).json({ error: 'Failed to fetch alert history' });
+    }
+});
+
+// Helper function to find where content differs
+function findFirstDifference(str1, str2) {
+    const minLength = Math.min(str1.length, str2.length);
+    for (let i = 0; i < minLength; i++) {
+        if (str1[i] !== str2[i]) {
+            const start = Math.max(0, i - 20);
+            const end = Math.min(i + 20, minLength);
+            return {
+                position: i,
+                context: {
+                    str1: str1.substring(start, end),
+                    str2: str2.substring(start, end)
+                }
+            };
+        }
+    }
+    return { position: minLength, lengthDifference: str1.length - str2.length };
+}
 
 // Error handling middleware
 app.use((err, req, res, next) => {

@@ -13,7 +13,6 @@ async function fetchStatus() {
     try {
         console.log('Fetching status...');
         const response = await fetch('/api/status');
-        console.log('Status response received');
         const data = await response.json();
         console.log('Status data:', data);
         
@@ -24,9 +23,26 @@ async function fetchStatus() {
             return;
         }
 
+        // Fetch alert counts for each monitoring task
+        const alertCounts = await Promise.all(
+            data.map(item => 
+                fetch(`/api/alerts-history/${item.id}`)
+                    .then(res => res.json())
+                    .then(alerts => ({
+                        alertId: item.id,
+                        count: alerts.length
+                    }))
+                    .catch(() => ({
+                        alertId: item.id,
+                        count: 0
+                    }))
+            )
+        );
+
         monitoringList.innerHTML = data.map(item => {
             const minutesLeft = Math.max(0, Math.round(item.minutes_left));
             const isActive = minutesLeft > 0;
+            const alertCount = alertCounts.find(ac => ac.alertId === item.id)?.count || 0;
             
             return `
                 <div class="monitoring-item ${isActive ? 'active' : ''}">
@@ -39,6 +55,7 @@ async function fetchStatus() {
                     <p>📧 Email: ${item.email}</p>
                     <p>📱 Phone: ${formatPhoneNumber(item.phone_number)}</p>
                     <p>⏱️ Duration: ${item.polling_duration} minutes</p>
+                    <p>🔔 Changes Detected: ${alertCount}</p>
                     <p class="time-remaining">
                         ${isActive 
                             ? `Time Remaining: ${minutesLeft} minutes` 
@@ -57,15 +74,6 @@ async function fetchStatus() {
         document.getElementById('monitoringList').innerHTML = 
             '<p>Error loading monitoring status</p>';
     }
-}
-
-function formatPhoneNumber(phone) {
-    const cleaned = phone.replace(/\D/g, '');
-    const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
-    if (match) {
-        return `${match[1]}-${match[2]}-${match[3]}`;
-    }
-    return phone;
 }
 
 // Add this test function
