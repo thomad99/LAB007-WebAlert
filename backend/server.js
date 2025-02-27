@@ -21,10 +21,12 @@ console.log('Database host:', process.env.DB_HOST);
 // Basic error handling
 process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err);
+    console.error(err.stack);
 });
 
-process.on('unhandledRejection', (err) => {
-    console.error('Unhandled Rejection:', err);
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise);
+    console.error('Reason:', reason);
 });
 
 app.use(cors());
@@ -46,6 +48,16 @@ db.connect((err) => {
 // Add a basic health check endpoint
 app.get('/', (req, res) => {
     res.send('Server is running');
+});
+
+// Add after your database connection test
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        env: process.env.NODE_ENV,
+        dbConnected: db.pool ? true : false
+    });
 });
 
 // API endpoint to start monitoring
