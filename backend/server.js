@@ -39,11 +39,30 @@ app.use(express.static(path.join(__dirname, '../frontend/public')));
 const monitoringTasks = new Map();
 
 // Test database connection
-db.connect((err) => {
+db.connect(async (err) => {
     if (err) {
         console.error('Database connection error:', err);
     } else {
         console.log('Database connected successfully');
+        try {
+            // Create tables if they don't exist
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS web_alerts (
+                    id SERIAL PRIMARY KEY,
+                    website_url TEXT NOT NULL,
+                    email VARCHAR(255) NOT NULL,
+                    phone_number VARCHAR(20) NOT NULL,
+                    polling_duration INTEGER NOT NULL,
+                    last_check TIMESTAMP,
+                    last_content TEXT,
+                    is_active BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                );
+            `);
+            console.log('Database schema initialized');
+        } catch (error) {
+            console.error('Error initializing database schema:', error);
+        }
     }
 });
 
