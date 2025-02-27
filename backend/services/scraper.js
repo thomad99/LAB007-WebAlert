@@ -9,14 +9,19 @@ class WebScraper {
                 '--disable-dev-shm-usage',
                 '--disable-gpu'
             ],
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-            headless: 'new'
+            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH,
+            headless: 'new',
+            ignoreHTTPSErrors: true
         });
         try {
             console.log('Browser launched successfully');
             const page = await browser.newPage();
             console.log('New page created');
-            await page.goto(url, { waitUntil: 'networkidle0' });
+            await page.setViewport({ width: 1280, height: 800 });
+            await page.goto(url, { 
+                waitUntil: 'networkidle0',
+                timeout: 30000 
+            });
             console.log('Page loaded');
             const content = await page.content();
             return content;
