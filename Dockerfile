@@ -29,6 +29,10 @@ RUN npm install
 # Copy source
 COPY . .
 
+# Copy frontend files specifically
+COPY frontend/public ./frontend/public
+COPY frontend/src ./frontend/src
+
 # Add user so we don't need --no-sandbox
 RUN groupadd -r pptruser && useradd -r -g pptruser -G audio,video pptruser \
     && mkdir -p /home/pptruser/Downloads \

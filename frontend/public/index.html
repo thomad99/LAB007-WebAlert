@@ -5,29 +5,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web-Alert Configuration</title>
     <link rel="stylesheet" href="../src/styles/main.css">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 </head>
 <body>
     <div class="container">
-        <h1>Web-Alert Configuration</h1>
-        <form id="alertForm">
-            <div class="form-group">
-                <label for="websiteUrl">Website Link:</label>
-                <input type="url" id="websiteUrl" name="websiteUrl" required>
+        <div class="card">
+            <h1>Web-Alert Configuration</h1>
+            <form id="alertForm">
+                <div class="form-group">
+                    <label for="websiteUrl">Website Link:</label>
+                    <input type="url" id="websiteUrl" name="websiteUrl" required 
+                           placeholder="https://example.com">
+                </div>
+                <div class="form-group">
+                    <label for="email">Email:</label>
+                    <input type="email" id="email" name="email" required
+                           placeholder="your@email.com">
+                </div>
+                <div class="form-group">
+                    <label for="phone">Cell Phone Number:</label>
+                    <input type="tel" id="phone" name="phone" required
+                           placeholder="123-456-7890">
+                </div>
+                <div class="form-group">
+                    <label for="duration">Duration of Polling (minutes):</label>
+                    <input type="number" id="duration" name="duration" min="1" required
+                           placeholder="Enter duration in minutes">
+                </div>
+                <button type="submit">Start Monitoring</button>
+            </form>
+            <div id="statusBox" class="status-box">
+                <h2>Monitoring Status</h2>
+                <div id="statusContent">
+                    No active monitoring
+                </div>
             </div>
-            <div class="form-group">
-                <label for="email">Email:</label>
-                <input type="email" id="email" name="email" required>
-            </div>
-            <div class="form-group">
-                <label for="phone">Cell Phone Number:</label>
-                <input type="tel" id="phone" name="phone" required>
-            </div>
-            <div class="form-group">
-                <label for="duration">Duration of Polling (minutes):</label>
-                <input type="number" id="duration" name="duration" min="1" required>
-            </div>
-            <button type="submit">Start Monitoring</button>
-        </form>
+        </div>
     </div>
     <script src="../src/js/main.js"></script>
 </body>
