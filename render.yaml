@@ -25,7 +25,7 @@ services:
       - key: PUPPETEER_EXECUTABLE_PATH
         value: "/usr/bin/google-chrome"
       - key: EMAIL_USER
-        value: "lovesailingai@gmail.com"
+        value: "thomad99@gmail.com"
       - key: EMAIL_PASSWORD
         value: "ctpw abgr dufm njxn"
       - key: TWILIO_ACCOUNT_SID
