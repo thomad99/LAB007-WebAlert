@@ -53,6 +53,24 @@ db.connect(async (err) => {
     } else {
         console.log('Database connected successfully');
         try {
+            // First, check if the column exists
+            const columnCheck = await db.query(`
+                SELECT column_name 
+                FROM information_schema.columns 
+                WHERE table_name = 'web_alerts' AND column_name = 'check_count'
+            `);
+
+            if (columnCheck.rows.length === 0) {
+                console.log('Adding check_count column...');
+                // Add the column if it doesn't exist
+                await db.query(`
+                    ALTER TABLE web_alerts 
+                    ADD COLUMN IF NOT EXISTS check_count INTEGER DEFAULT 0,
+                    ADD COLUMN IF NOT EXISTS last_debug JSONB
+                `);
+                console.log('Added check_count and last_debug columns');
+            }
+
             // Create web_alerts table if it doesn't exist
             await db.query(`
                 CREATE TABLE IF NOT EXISTS web_alerts (
@@ -64,6 +82,7 @@ db.connect(async (err) => {
                     check_count INTEGER DEFAULT 0,
                     last_check TIMESTAMP,
                     last_content TEXT,
+                    last_debug JSONB,
                     is_active BOOLEAN DEFAULT true,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
@@ -84,6 +103,7 @@ db.connect(async (err) => {
             console.log('Database schema initialized');
         } catch (error) {
             console.error('Error initializing database schema:', error);
+            console.error('Error details:', error.stack);
         }
     }
 });
