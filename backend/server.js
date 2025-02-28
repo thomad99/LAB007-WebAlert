@@ -660,6 +660,127 @@ app.get('/api/check-twilio', async (req, res) => {
     }
 });
 
+// Add this endpoint to check active monitoring
+app.get('/api/active-monitors', async (req, res) => {
+    try {
+        const result = await db.query(`
+            SELECT 
+                id,
+                website_url,
+                email,
+                phone_number,
+                polling_duration,
+                check_count,
+                last_check,
+                created_at,
+                is_active,
+                polling_duration - check_count as checks_remaining,
+                ROUND((check_count::float / polling_duration::float * 100), 1) as progress_percent,
+                NOW() - last_check as time_since_last_check
+            FROM web_alerts 
+            WHERE is_active = true 
+            ORDER BY last_check DESC
+        `);
+
+        // Get stuck monitors (haven't checked in over 5 minutes)
+        const stuckMonitors = await db.query(`
+            SELECT id, website_url, last_check, NOW() - last_check as stuck_time
+            FROM web_alerts 
+            WHERE 
+                is_active = true 
+                AND (NOW() - last_check) > interval '5 minutes'
+        `);
+
+        res.json({
+            activeCount: result.rows.length,
+            activeMonitors: result.rows,
+            stuckMonitors: stuckMonitors.rows,
+            monitoringTaskCount: monitoringTasks.size
+        });
+    } catch (error) {
+        console.error('Error fetching active monitors:', error);
+        res.status(500).json({ error: 'Failed to fetch active monitors' });
+    }
+});
+
+// Add this endpoint to stop overrun scans
+app.post('/api/stop-overrun-scans', async (req, res) => {
+    try {
+        // Find all scans that have exceeded their duration
+        const overrunScans = await db.query(`
+            SELECT 
+                id,
+                website_url,
+                check_count,
+                polling_duration
+            FROM web_alerts 
+            WHERE 
+                is_active = true 
+                AND check_count >= polling_duration
+        `);
+
+        console.log('Found overrun scans:', overrunScans.rows);
+
+        // Stop each overrun scan
+        for (const scan of overrunScans.rows) {
+            // Stop the monitoring task if it exists
+            if (monitoringTasks.has(scan.id)) {
+                console.log(`Stopping monitoring task for ID ${scan.id}`);
+                monitoringTasks.get(scan.id).stop();
+                monitoringTasks.delete(scan.id);
+            }
+
+            // Mark as inactive in database
+            await db.query(`
+                UPDATE web_alerts 
+                SET is_active = false 
+                WHERE id = $1
+            `, [scan.id]);
+
+            console.log(`Marked scan ${scan.id} as inactive`);
+        }
+
+        res.json({
+            message: 'Overrun scans stopped',
+            stoppedScans: overrunScans.rows,
+            count: overrunScans.rows.length
+        });
+    } catch (error) {
+        console.error('Error stopping overrun scans:', error);
+        res.status(500).json({ error: 'Failed to stop overrun scans' });
+    }
+});
+
+// Add an endpoint to force stop a specific scan
+app.post('/api/stop-scan/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Stop the monitoring task if it exists
+        if (monitoringTasks.has(parseInt(id))) {
+            monitoringTasks.get(parseInt(id)).stop();
+            monitoringTasks.delete(parseInt(id));
+        }
+
+        // Mark as inactive in database
+        await db.query(`
+            UPDATE web_alerts 
+            SET is_active = false 
+            WHERE id = $1
+            RETURNING id, website_url, check_count, polling_duration
+        `, [id]);
+
+        res.json({
+            message: `Scan ${id} stopped successfully`,
+            taskStopped: true,
+            taskRemoved: true
+        });
+    } catch (error) {
+        console.error(`Error stopping scan ${req.params.id}:`, error);
+        res.status(500).json({ error: 'Failed to stop scan' });
+    }
+});
+
 // Helper function to find where content differs
 function findFirstDifference(str1, str2) {
     const minLength = Math.min(str1.length, str2.length);
