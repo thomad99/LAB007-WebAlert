@@ -568,6 +568,51 @@ app.get('/api/test-scrape', async (req, res) => {
     }
 });
 
+// Add these test endpoints
+app.get('/api/test-email', async (req, res) => {
+    const testEmail = req.query.email || 'test@example.com';
+    const testUrl = req.query.url || 'https://example.com';
+    
+    try {
+        console.log('Testing email service...');
+        const result = await emailService.sendAlert(testEmail, testUrl);
+        res.json({
+            success: true,
+            message: 'Test email sent successfully',
+            details: result
+        });
+    } catch (error) {
+        console.error('Test email failed:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            stack: error.stack
+        });
+    }
+});
+
+app.get('/api/test-sms', async (req, res) => {
+    const testPhone = req.query.phone || '+1234567890';
+    const testUrl = req.query.url || 'https://example.com';
+    
+    try {
+        console.log('Testing SMS service...');
+        const result = await smsService.sendAlert(testPhone, testUrl);
+        res.json({
+            success: true,
+            message: 'Test SMS sent successfully',
+            details: result
+        });
+    } catch (error) {
+        console.error('Test SMS failed:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            stack: error.stack
+        });
+    }
+});
+
 // Helper function to find where content differs
 function findFirstDifference(str1, str2) {
     const minLength = Math.min(str1.length, str2.length);
