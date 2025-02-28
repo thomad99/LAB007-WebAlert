@@ -9,15 +9,15 @@ services:
       - key: NODE_ENV
         value: production
       - key: DB_HOST
-        value: dpg-culanb8gph6c73d9jl50-a
+        sync: false
       - key: DB_USER
-        value: sail1
+        sync: false
       - key: DB_PASSWORD
-        value: 5p2GYOeXinvhRvhfOjkK30zItFISFcxs
+        sync: false
       - key: DB_NAME
-        value: sail_exks
+        sync: false
       - key: DB_PORT
-        value: "5432"
+        sync: false
       - key: PORT
         value: "3000"
       - key: PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
@@ -29,11 +29,11 @@ services:
       - key: EMAIL_PASSWORD
         sync: false
       - key: TWILIO_ACCOUNT_SID
-        value: "ACbd3b92b529374514d593d39275a9cc68"
+        sync: false
       - key: TWILIO_AUTH_TOKEN
-        value: "your-twilio-auth-token"
+        sync: false
       - key: TWILIO_PHONE_NUMBER
-        value: "9413269015"
+        sync: false
     disk:
       name: tmp
       mountPath: /tmp

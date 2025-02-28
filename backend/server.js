@@ -591,24 +591,71 @@ app.get('/api/test-email', async (req, res) => {
     }
 });
 
+// Add these test endpoints for SMS
 app.get('/api/test-sms', async (req, res) => {
     const testPhone = req.query.phone || '+1234567890';
     const testUrl = req.query.url || 'https://example.com';
     
     try {
+        // First test the connection
+        const connectionTest = await smsService.testConnection();
+        console.log('Twilio connection test:', connectionTest);
+
+        if (connectionTest.status === 'error') {
+            throw new Error(`Twilio connection failed: ${connectionTest.error}`);
+        }
+
+        // Then try to send a message
         console.log('Testing SMS service...');
         const result = await smsService.sendAlert(testPhone, testUrl);
+        
         res.json({
             success: true,
             message: 'Test SMS sent successfully',
-            details: result
+            connectionTest,
+            smsResult: {
+                sid: result.sid,
+                status: result.status,
+                to: result.to,
+                from: result.from,
+                direction: result.direction
+            }
         });
     } catch (error) {
         console.error('Test SMS failed:', error);
         res.status(500).json({
             success: false,
             error: error.message,
-            stack: error.stack
+            code: error.code,
+            connectionTest: await smsService.testConnection(),
+            twilioConfig: {
+                accountSidExists: !!process.env.TWILIO_ACCOUNT_SID,
+                authTokenExists: !!process.env.TWILIO_AUTH_TOKEN,
+                phoneNumberExists: !!process.env.TWILIO_PHONE_NUMBER
+            }
+        });
+    }
+});
+
+// Add an endpoint to check Twilio configuration
+app.get('/api/check-twilio', async (req, res) => {
+    try {
+        const connectionTest = await smsService.testConnection();
+        res.json({
+            status: 'success',
+            connection: connectionTest,
+            config: {
+                accountSidExists: !!process.env.TWILIO_ACCOUNT_SID,
+                authTokenExists: !!process.env.TWILIO_AUTH_TOKEN,
+                phoneNumberExists: !!process.env.TWILIO_PHONE_NUMBER,
+                phoneNumber: process.env.TWILIO_PHONE_NUMBER
+            }
+        });
+    } catch (error) {
+        res.status(500).json({
+            status: 'error',
+            error: error.message,
+            code: error.code
         });
     }
 });
