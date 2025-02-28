@@ -1,26 +1,26 @@
 const twilio = require('twilio');
 
-class SMSService {
-    constructor() {
-        this.client = twilio(
-            process.env.TWILIO_ACCOUNT_SID,
-            process.env.TWILIO_AUTH_TOKEN
-        );
-    }
+const client = twilio(
+    process.env.TWILIO_ACCOUNT_SID,
+    process.env.TWILIO_AUTH_TOKEN
+);
 
-    async sendAlert(phoneNumber, url) {
-        try {
-            await this.client.messages.create({
-                body: `Web-Alert - Web Page change Detected on this URL: ${url}`,
-                from: process.env.TWILIO_PHONE_NUMBER,
-                to: phoneNumber
-            });
-            console.log('Alert SMS sent successfully');
-        } catch (error) {
-            console.error('Error sending SMS:', error);
-            throw error;
-        }
+async function sendAlert(phone, websiteUrl) {
+    try {
+        console.log('Sending SMS alert to:', phone);
+        const message = await client.messages.create({
+            body: `Change detected on ${websiteUrl}`,
+            to: phone,
+            from: process.env.TWILIO_PHONE_NUMBER
+        });
+        console.log('SMS sent:', message.sid);
+        return message;
+    } catch (error) {
+        console.error('Error sending SMS:', error);
+        throw error;
     }
 }
 
-module.exports = new SMSService(); 
+module.exports = {
+    sendAlert
+}; 

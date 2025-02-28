@@ -210,17 +210,41 @@ app.post('/api/monitor', async (req, res) => {
                         const alertRecord = await db.query(`
                             INSERT INTO alerts_history 
                                 (alert_id, content_before, content_after, email_sent, sms_sent) 
-                            VALUES ($1, $2, $3, $4, $4) 
+                            VALUES ($1, $2, $3, false, false) 
                             RETURNING *
-                        `, [alertId, previousContent, content, true]);
+                        `, [alertId, previousContent, content]);
                         
                         console.log('Alert recorded:', alertRecord.rows[0]);
 
-                        await Promise.all([
-                            emailService.sendAlert(email, websiteUrl),
-                            smsService.sendAlert(phone, websiteUrl)
-                        ]);
-                        console.log('Notifications sent successfully');
+                        try {
+                            // Send email notification
+                            await emailService.sendAlert(email, websiteUrl)
+                                .then(async () => {
+                                    await db.query(
+                                        'UPDATE alerts_history SET email_sent = true WHERE id = $1',
+                                        [alertRecord.rows[0].id]
+                                    );
+                                    console.log('Email notification sent and recorded');
+                                })
+                                .catch(error => {
+                                    console.error('Failed to send email:', error);
+                                });
+
+                            // Send SMS notification
+                            await smsService.sendAlert(phone, websiteUrl)
+                                .then(async () => {
+                                    await db.query(
+                                        'UPDATE alerts_history SET sms_sent = true WHERE id = $1',
+                                        [alertRecord.rows[0].id]
+                                    );
+                                    console.log('SMS notification sent and recorded');
+                                })
+                                .catch(error => {
+                                    console.error('Failed to send SMS:', error);
+                                });
+                        } catch (error) {
+                            console.error('Error sending notifications:', error);
+                        }
                     }
                 } else {
                     console.log('First check - storing initial content');

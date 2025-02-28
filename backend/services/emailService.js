@@ -1,33 +1,35 @@
 const nodemailer = require('nodemailer');
 
-class EmailService {
-    constructor() {
-        this.transporter = nodemailer.createTransport({
-            service: 'gmail',
-            auth: {
-                user: process.env.EMAIL_USER,
-                pass: process.env.EMAIL_PASSWORD
-            }
-        });
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD // This should be an app-specific password
     }
+});
 
-    async sendAlert(email, url) {
-        const mailOptions = {
+async function sendAlert(email, websiteUrl) {
+    try {
+        console.log('Sending email alert to:', email);
+        const info = await transporter.sendMail({
             from: process.env.EMAIL_USER,
             to: email,
-            subject: 'Web-Alert - Change Detected',
-            text: `Web-Alert - Web Page change Detected on this URL: ${url}`,
-            html: `<h1>Web-Alert</h1><p>A change has been detected on: <a href="${url}">${url}</a></p>`
-        };
-
-        try {
-            await this.transporter.sendMail(mailOptions);
-            console.log('Alert email sent successfully');
-        } catch (error) {
-            console.error('Error sending email:', error);
-            throw error;
-        }
+            subject: 'Website Change Detected',
+            text: `A change has been detected on ${websiteUrl}`,
+            html: `
+                <h2>Website Change Alert</h2>
+                <p>A change has been detected on: <a href="${websiteUrl}">${websiteUrl}</a></p>
+                <p>Time: ${new Date().toLocaleString()}</p>
+            `
+        });
+        console.log('Email sent:', info.messageId);
+        return info;
+    } catch (error) {
+        console.error('Error sending email:', error);
+        throw error;
     }
 }
 
-module.exports = new EmailService(); 
+module.exports = {
+    sendAlert
+}; 
