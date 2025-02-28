@@ -525,6 +525,31 @@ app.get('/api/debug/:alertId', async (req, res) => {
     }
 });
 
+// Add this new test endpoint
+app.get('/api/test-scrape', async (req, res) => {
+    const url = req.query.url || 'https://example.com';
+    try {
+        console.log(`Testing scraper with URL: ${url}`);
+        const { content, debug } = await scraper.scrape(url);
+        
+        res.json({
+            success: true,
+            url,
+            contentLength: content.length,
+            contentPreview: content.substring(0, 500),
+            debug
+        });
+    } catch (error) {
+        console.error('Test scrape failed:', error);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            stack: error.stack,
+            debug: error.debug
+        });
+    }
+});
+
 // Helper function to find where content differs
 function findFirstDifference(str1, str2) {
     const minLength = Math.min(str1.length, str2.length);
