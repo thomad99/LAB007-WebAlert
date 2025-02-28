@@ -188,6 +188,12 @@ app.post('/api/monitor', async (req, res) => {
                 const { content, debug } = await scraper.scrape(websiteUrl);
                 console.log('Scrape debug info:', debug);
 
+                // Always update last_check and content
+                await db.query(
+                    'UPDATE web_alerts SET last_check = NOW(), last_content = $1, last_debug = $2 WHERE id = $3',
+                    [content, JSON.stringify(debug), alertId]
+                );
+
                 if (previousContent) {
                     const contentChanged = content !== previousContent;
                     console.log('Content comparison:', {
@@ -200,7 +206,7 @@ app.post('/api/monitor', async (req, res) => {
                     if (contentChanged) {
                         console.log('Change detected, sending notifications...');
                         
-                        // Record the alert
+                        // Record the change in history
                         const alertRecord = await db.query(`
                             INSERT INTO alerts_history 
                                 (alert_id, content_before, content_after, email_sent, sms_sent) 
@@ -215,24 +221,12 @@ app.post('/api/monitor', async (req, res) => {
                             smsService.sendAlert(phone, websiteUrl)
                         ]);
                         console.log('Notifications sent successfully');
-
-                        await db.query(
-                            'UPDATE web_alerts SET last_check = NOW(), last_content = $1, last_debug = $2 WHERE id = $3',
-                            [content, JSON.stringify(debug), alertId]
-                        );
-                        console.log('Database updated with new content');
                     }
                 } else {
                     console.log('First check - storing initial content');
                 }
 
                 previousContent = content;
-
-                // Update last_check even if content hasn't changed
-                await db.query(
-                    'UPDATE web_alerts SET last_check = NOW() WHERE id = $1',
-                    [alertId]
-                );
 
                 if (checkCount >= duration) {
                     console.log(`Monitoring complete for alert ID ${alertId}`);
