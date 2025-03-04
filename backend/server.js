@@ -46,6 +46,110 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 // Store active monitoring tasks
 const monitoringTasks = new Map();
 
+// Function to start monitoring a URL
+async function startUrlMonitoring(urlId, websiteUrl) {
+    if (monitoringTasks.has(urlId)) {
+        console.log(`Monitoring already active for URL ID ${urlId}`);
+        return;
+    }
+
+    console.log(`Starting monitoring for URL ID ${urlId}: ${websiteUrl}`);
+    let previousContent = null;
+
+    const task = cron.schedule('*/5 * * * *', async () => {
+        try {
+            console.log(`Checking URL ID ${urlId}: ${websiteUrl}`);
+            
+            // Update check count
+            await db.query(
+                'UPDATE monitored_urls SET check_count = check_count + 1 WHERE id = $1',
+                [urlId]
+            );
+
+            // Scrape the URL
+            const { content, debug } = await scraper.scrape(websiteUrl);
+
+            // Update last check and content
+            await db.query(
+                'UPDATE monitored_urls SET last_check = NOW(), last_content = $1, last_debug = $2 WHERE id = $1',
+                [content, JSON.stringify(debug), urlId]
+            );
+
+            if (previousContent && content !== previousContent) {
+                console.log(`Change detected for URL ID ${urlId}`);
+
+                // Get all active subscribers for this URL
+                const subscribers = await db.query(`
+                    SELECT 
+                        as.id as subscriber_id,
+                        as.email,
+                        as.phone_number,
+                        as.polling_duration,
+                        as.created_at + (as.polling_duration || ' minutes')::interval as end_time
+                    FROM alert_subscribers as
+                    WHERE 
+                        as.url_id = $1 
+                        AND as.is_active = true
+                        AND NOW() < as.created_at + (as.polling_duration || ' minutes')::interval
+                `, [urlId]);
+
+                // Record change and notify each subscriber
+                for (const subscriber of subscribers.rows) {
+                    try {
+                        // Record the change
+                        const alertRecord = await db.query(`
+                            INSERT INTO alerts_history 
+                                (url_id, subscriber_id, content_before, content_after) 
+                            VALUES ($1, $2, $3, $4) 
+                            RETURNING id
+                        `, [urlId, subscriber.id, previousContent, content]);
+
+                        // Send notifications
+                        await Promise.all([
+                            emailService.sendAlert(subscriber.email, websiteUrl)
+                                .then(() => db.query(
+                                    'UPDATE alerts_history SET email_sent = true WHERE id = $1',
+                                    [alertRecord.rows[0].id]
+                                )),
+                            smsService.sendAlert(subscriber.phone_number, websiteUrl)
+                                .then(() => db.query(
+                                    'UPDATE alerts_history SET sms_sent = true WHERE id = $1',
+                                    [alertRecord.rows[0].id]
+                                ))
+                        ]);
+                    } catch (error) {
+                        console.error(`Error notifying subscriber ${subscriber.id}:`, error);
+                    }
+                }
+            }
+
+            previousContent = content;
+
+            // Check if monitoring should continue
+            const activeSubscribers = await db.query(`
+                SELECT COUNT(*) 
+                FROM alert_subscribers 
+                WHERE 
+                    url_id = $1 
+                    AND is_active = true
+                    AND NOW() < created_at + (polling_duration || ' minutes')::interval
+            `, [urlId]);
+
+            if (parseInt(activeSubscribers.rows[0].count) === 0) {
+                console.log(`No active subscribers left for URL ID ${urlId}, stopping monitoring`);
+                task.stop();
+                monitoringTasks.delete(urlId);
+                await db.query('UPDATE monitored_urls SET is_active = false WHERE id = $1', [urlId]);
+            }
+
+        } catch (error) {
+            console.error(`Error in monitoring task for URL ID ${urlId}:`, error);
+        }
+    });
+
+    monitoringTasks.set(urlId, task);
+}
+
 // Test database connection
 db.connect(async (err) => {
     if (err) {
@@ -129,178 +233,46 @@ app.get('/health', (req, res) => {
 
 // API endpoint to start monitoring
 app.post('/api/monitor', async (req, res) => {
-    console.log('POST /api/monitor received:', req.body);
-    
     const { websiteUrl, email, phone, duration } = req.body;
-    
-    if (!websiteUrl || !email || !phone || !duration) {
-        console.error('Missing required fields:', { websiteUrl, email, phone, duration });
-        return res.status(400).json({ 
-            error: 'Missing required fields',
-            received: { websiteUrl, email, phone, duration }
-        });
-    }
 
     try {
-        // Test connection first
-        console.log('Testing database connection...');
-        const testResult = await db.query('SELECT NOW() as time');
-        console.log('Database test successful:', testResult.rows[0]);
+        // First, get or create the monitored URL
+        let urlRecord = await db.query(
+            'SELECT * FROM monitored_urls WHERE website_url = $1',
+            [websiteUrl]
+        );
 
-        // Insert the monitoring request
-        console.log('Inserting monitoring request...');
-        const insertQuery = `
-            INSERT INTO web_alerts 
-                (website_url, email, phone_number, polling_duration) 
-            VALUES 
-                ($1, $2, $3, $4) 
-            RETURNING *`;
-        
-        const values = [websiteUrl, email, phone, duration];
-        console.log('Insert query:', { query: insertQuery, values });
-
-        const result = await db.query(insertQuery, values);
-        
-        if (!result.rows[0]) {
-            throw new Error('Insert did not return the created row');
+        let urlId;
+        if (urlRecord.rows.length === 0) {
+            // New URL to monitor
+            const newUrl = await db.query(
+                'INSERT INTO monitored_urls (website_url, is_active) VALUES ($1, true) RETURNING id',
+                [websiteUrl]
+            );
+            urlId = newUrl.rows[0].id;
+        } else {
+            urlId = urlRecord.rows[0].id;
         }
 
-        const newAlert = result.rows[0];
-        console.log('Successfully inserted alert:', newAlert);
+        // Create subscriber record
+        const subscriber = await db.query(`
+            INSERT INTO alert_subscribers 
+                (url_id, email, phone_number, polling_duration) 
+            VALUES ($1, $2, $3, $4) 
+            RETURNING *
+        `, [urlId, email, phone, duration]);
 
-        // Set up monitoring task
-        const alertId = newAlert.id;
-        let checkCount = 0;
-        let previousContent = null;
+        // Start monitoring if not already active
+        await startUrlMonitoring(urlId, websiteUrl);
 
-        console.log('Setting up cron task for alert:', alertId);
-        const task = cron.schedule('* * * * *', async () => {
-            try {
-                checkCount++;
-                console.log(`Running check ${checkCount}/${duration} for alert ID ${alertId}`);
-                
-                // Update check count in database
-                await db.query(
-                    'UPDATE web_alerts SET check_count = check_count + 1 WHERE id = $1',
-                    [alertId]
-                );
-
-                const { content, debug } = await scraper.scrape(websiteUrl);
-                console.log('Scrape debug info:', debug);
-
-                // Always update last_check and content
-                await db.query(
-                    'UPDATE web_alerts SET last_check = NOW(), last_content = $1, last_debug = $2 WHERE id = $3',
-                    [content, JSON.stringify(debug), alertId]
-                );
-
-                if (previousContent) {
-                    const contentChanged = content !== previousContent;
-                    console.log('Content comparison:', {
-                        contentChanged,
-                        currentLength: content.length,
-                        previousLength: previousContent.length,
-                        firstDifference: contentChanged ? findFirstDifference(content, previousContent) : null
-                    });
-
-                    if (contentChanged) {
-                        console.log('Change detected, sending notifications...');
-                        
-                        // Record the change in history
-                        const alertRecord = await db.query(`
-                            INSERT INTO alerts_history 
-                                (alert_id, content_before, content_after, email_sent, sms_sent) 
-                            VALUES ($1, $2, $3, false, false) 
-                            RETURNING *
-                        `, [alertId, previousContent, content]);
-                        
-                        console.log('Alert recorded:', alertRecord.rows[0]);
-
-                        try {
-                            // Send email notification
-                            await emailService.sendAlert(email, websiteUrl)
-                                .then(async () => {
-                                    await db.query(
-                                        'UPDATE alerts_history SET email_sent = true WHERE id = $1',
-                                        [alertRecord.rows[0].id]
-                                    );
-                                    console.log('Email notification sent and recorded');
-                                })
-                                .catch(error => {
-                                    console.error('Failed to send email:', error);
-                                });
-
-                            // Send SMS notification
-                            await smsService.sendAlert(phone, websiteUrl)
-                                .then(async () => {
-                                    await db.query(
-                                        'UPDATE alerts_history SET sms_sent = true WHERE id = $1',
-                                        [alertRecord.rows[0].id]
-                                    );
-                                    console.log('SMS notification sent and recorded');
-                                })
-                                .catch(error => {
-                                    console.error('Failed to send SMS:', error);
-                                });
-                        } catch (error) {
-                            console.error('Error sending notifications:', error);
-                        }
-                    }
-                } else {
-                    console.log('First check - storing initial content');
-                }
-
-                previousContent = content;
-
-                if (checkCount >= duration) {
-                    console.log(`Monitoring complete for alert ID ${alertId}`);
-                    task.stop();
-                    monitoringTasks.delete(alertId);
-                    await db.query(
-                        'UPDATE web_alerts SET is_active = false WHERE id = $1',
-                        [alertId]
-                    );
-                }
-            } catch (error) {
-                console.error(`Error in monitoring task for alert ID ${alertId}:`, error);
-            }
-        });
-
-        monitoringTasks.set(alertId, task);
-        console.log('Monitoring task created:', { alertId, taskCount: monitoringTasks.size });
-
-        // Verify the insert with a select
-        const verify = await db.query('SELECT * FROM web_alerts WHERE id = $1', [alertId]);
-        console.log('Verification query result:', verify.rows[0]);
-
-        return res.json({
+        res.json({
             message: 'Monitoring started successfully',
-            alert: newAlert,
-            debug: {
-                taskCreated: true,
-                taskStored: monitoringTasks.has(alertId),
-                activeTasksCount: monitoringTasks.size,
-                verificationResult: verify.rows[0] ? 'found' : 'not found'
-            }
+            subscriber: subscriber.rows[0]
         });
 
     } catch (error) {
-        console.error('Error in /api/monitor:', {
-            error: error.message,
-            stack: error.stack,
-            code: error.code,
-            detail: error.detail
-        });
-
-        return res.status(500).json({
-            error: 'Failed to start monitoring',
-            details: error.message,
-            debug: {
-                errorType: error.name,
-                errorCode: error.code,
-                errorDetail: error.detail
-            }
-        });
+        console.error('Error starting monitoring:', error);
+        res.status(500).json({ error: 'Failed to start monitoring' });
     }
 });
 

@@ -18,16 +18,41 @@ try {
     throw error;
 }
 
+// Helper function to format phone numbers
+function formatPhoneNumber(phone) {
+    // Remove any non-digit characters
+    const cleaned = phone.replace(/\D/g, '');
+    
+    // If it's a 10-digit US number without country code, add +1
+    if (cleaned.length === 10) {
+        return `+1${cleaned}`;
+    }
+    
+    // If it already has country code (11 digits starting with 1)
+    if (cleaned.length === 11 && cleaned.startsWith('1')) {
+        return `+${cleaned}`;
+    }
+    
+    // If it already has a plus, return original
+    if (phone.startsWith('+')) {
+        return phone;
+    }
+    
+    // Default to adding +1 if none of the above
+    return `+1${cleaned}`;
+}
+
 async function sendAlert(phone, websiteUrl) {
     try {
+        // Format the phone number
+        const formattedPhone = formatPhoneNumber(phone);
+        
         console.log('Attempting to send SMS...', {
-            to: phone,
+            originalPhone: phone,
+            formattedPhone: formattedPhone,
             from: process.env.TWILIO_PHONE_NUMBER,
             websiteUrl
         });
-
-        // Format the phone number if it doesn't start with +
-        const formattedPhone = phone.startsWith('+') ? phone : `+${phone}`;
         
         const message = await client.messages.create({
             body: `Change detected on ${websiteUrl}`,
@@ -49,7 +74,7 @@ async function sendAlert(phone, websiteUrl) {
             code: error.code,
             moreInfo: error.moreInfo,
             status: error.status,
-            phone,
+            originalPhone: phone,
             twilioNumber: process.env.TWILIO_PHONE_NUMBER
         });
         throw error;
@@ -79,5 +104,6 @@ async function testConnection() {
 
 module.exports = {
     sendAlert,
-    testConnection
+    testConnection,
+    formatPhoneNumber // Export for testing
 }; 
