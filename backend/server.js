@@ -415,12 +415,14 @@ app.get('/api/status', async (req, res) => {
                 EXTRACT(EPOCH FROM (as2.created_at + (as2.polling_duration || ' minutes')::interval) - NOW())/60 as minutes_left,
                 (
                     SELECT COUNT(*) 
-                    FROM alerts_history ah 
-                    WHERE ah.url_id = mu.id
+                    FROM alerts_history 
+                    WHERE alerts_history.url_id = mu.id
                 ) as changes_count
             FROM monitored_urls mu
             LEFT JOIN alert_subscribers as2 ON mu.id = as2.url_id
-            WHERE mu.is_active = true OR as2.is_active = true
+            WHERE mu.is_active = true 
+            GROUP BY mu.id, mu.website_url, mu.last_check, mu.check_count, mu.is_active, mu.created_at,
+                     as2.email, as2.phone_number, as2.polling_duration, as2.created_at
             ORDER BY mu.created_at DESC
         `);
         
