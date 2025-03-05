@@ -85,6 +85,14 @@
             background-color: #dc3545;
             color: white;
         }
+        .badge-warning {
+            background-color: #ffc107;
+            color: #000;
+        }
+        .badge-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
         .modal {
             display: none;
             position: fixed;
@@ -133,6 +141,7 @@
                     <th>Status</th>
                     <th>Last Check</th>
                     <th>Check Count</th>
+                    <th>Changes</th>
                     <th>Time Left</th>
                     <th>Actions</th>
                 </tr>
@@ -211,7 +220,7 @@
                 if (!data || data.length === 0) {
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td colspan="6" style="text-align: center;">No active monitoring tasks</td>
+                        <td colspan="7" style="text-align: center;">No active monitoring tasks</td>
                     `;
                     tableBody.appendChild(row);
                     return;
@@ -228,6 +237,11 @@
                         </td>
                         <td>${formatDate(item.last_check)}</td>
                         <td>${item.check_count || 0}</td>
+                        <td>
+                            <span class="badge ${parseInt(item.changes_count) > 0 ? 'badge-warning' : 'badge-secondary'}">
+                                ${item.changes_count || 0}
+                            </span>
+                        </td>
                         <td>${formatTimeLeft(item.minutes_left)}</td>
                         <td>
                             <button class="button button-danger" onclick="stopMonitoring(${item.id})">
@@ -242,7 +256,7 @@
                 const tableBody = document.getElementById('statusTableBody');
                 tableBody.innerHTML = `
                     <tr>
-                        <td colspan="6" style="text-align: center; color: #dc3545;">
+                        <td colspan="7" style="text-align: center; color: #dc3545;">
                             Error loading status data. Please try refreshing the page.
                         </td>
                     </tr>

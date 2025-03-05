@@ -304,8 +304,12 @@ app.post('/api/monitor', async (req, res) => {
     const { websiteUrl, email, phone, duration } = req.body;
 
     try {
+        // Log the incoming request
+        console.log('Received monitoring request:', { websiteUrl, email, phone, duration });
+
         // Validate required fields
         if (!websiteUrl || !email || !phone || !duration) {
+            console.log('Missing required fields:', { websiteUrl, email, phone, duration });
             return res.status(400).json({
                 error: 'Missing required fields',
                 required: ['websiteUrl', 'email', 'phone', 'duration'],
@@ -313,9 +317,8 @@ app.post('/api/monitor', async (req, res) => {
             });
         }
 
-        console.log('Starting monitoring for:', { websiteUrl, email, phone, duration });
-
         // First, get or create the monitored URL
+        console.log('Checking for existing URL record...');
         let urlRecord = await db.query(
             'SELECT * FROM monitored_urls WHERE website_url = $1',
             [websiteUrl]
@@ -323,8 +326,7 @@ app.post('/api/monitor', async (req, res) => {
 
         let urlId;
         if (!urlRecord.rows || urlRecord.rows.length === 0) {
-            // New URL to monitor
-            console.log('Creating new URL record for:', websiteUrl);
+            console.log('Creating new URL record...');
             const newUrl = await db.query(
                 'INSERT INTO monitored_urls (website_url, is_active) VALUES ($1, true) RETURNING *',
                 [websiteUrl]
@@ -339,10 +341,12 @@ app.post('/api/monitor', async (req, res) => {
         } else {
             urlId = urlRecord.rows[0].id;
             console.log('Found existing URL record with ID:', urlId);
-        }
 
-        if (!urlId) {
-            throw new Error('Failed to get or create URL record');
+            // Reactivate the URL if it was inactive
+            await db.query(
+                'UPDATE monitored_urls SET is_active = true WHERE id = $1',
+                [urlId]
+            );
         }
 
         // Create subscriber record
@@ -358,27 +362,34 @@ app.post('/api/monitor', async (req, res) => {
             throw new Error('Failed to create subscriber record');
         }
 
-        console.log('Created subscriber record:', subscriber.rows[0]);
-
         // Start monitoring if not already active
         if (!monitoringTasks.has(urlId)) {
-            console.log('Starting monitoring for URL ID:', urlId);
+            console.log('Starting monitoring task...');
             await startUrlMonitoring(urlId, websiteUrl);
         } else {
-            console.log('Monitoring already active for URL ID:', urlId);
+            console.log('Monitoring already active');
         }
 
-        res.json({
+        // Return success response
+        const response = {
+            success: true,
             message: 'Monitoring started successfully',
-            urlId: urlId,
-            subscriber: subscriber.rows[0],
-            isNewUrl: !urlRecord.rows || urlRecord.rows.length === 0
-        });
+            data: {
+                urlId: urlId,
+                websiteUrl: websiteUrl,
+                subscriber: subscriber.rows[0],
+                isNewUrl: !urlRecord.rows || urlRecord.rows.length === 0
+            }
+        };
+        
+        console.log('Monitoring setup complete:', response);
+        res.json(response);
 
     } catch (error) {
-        console.error('Error starting monitoring:', error);
+        console.error('Error in /api/monitor:', error);
         console.error('Stack:', error.stack);
         res.status(500).json({ 
+            success: false,
             error: 'Failed to start monitoring',
             message: error.message,
             details: error.stack
@@ -401,7 +412,12 @@ app.get('/api/status', async (req, res) => {
                 as2.email,
                 as2.phone_number,
                 as2.polling_duration,
-                EXTRACT(EPOCH FROM (as2.created_at + (as2.polling_duration || ' minutes')::interval) - NOW())/60 as minutes_left
+                EXTRACT(EPOCH FROM (as2.created_at + (as2.polling_duration || ' minutes')::interval) - NOW())/60 as minutes_left,
+                (
+                    SELECT COUNT(*) 
+                    FROM alerts_history ah 
+                    WHERE ah.url_id = mu.id
+                ) as changes_count
             FROM monitored_urls mu
             LEFT JOIN alert_subscribers as2 ON mu.id = as2.url_id
             WHERE mu.is_active = true OR as2.is_active = true
