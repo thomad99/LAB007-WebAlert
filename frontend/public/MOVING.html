@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test Page - Updates Every 3 Minutes</title>
+    <title>Test Page - Updates Every 11 Minutes</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -37,29 +37,24 @@
             color: #80868b;
             font-size: 0.9rem;
         }
-        .next-update {
-            margin-top: 1rem;
-            color: #ea4335;
-        }
     </style>
 </head>
 <body>
     <div class="clock-container">
-        <h1>Test Page - 3 Minute Updates</h1>
+        <h1>Test Page - 11 Minute Updates</h1>
         <div class="date" id="date">Loading...</div>
         <div class="time" id="time">Loading...</div>
-        <div class="update-info">This page updates every 3 minutes</div>
-        <div class="next-update" id="next-update">Next update in: calculating...</div>
+        <div class="update-info">This page updates every 11 minutes</div>
     </div>
 
     <script>
         function updateClock() {
             const now = new Date();
-            // Round down to the nearest 3 minutes
+            // Round down to the nearest 11 minutes
             now.setSeconds(0);
             now.setMilliseconds(0);
             const minutes = now.getMinutes();
-            now.setMinutes(Math.floor(minutes / 3) * 3);
+            now.setMinutes(Math.floor(minutes / 11) * 11);
 
             // Update time display
             document.getElementById('time').textContent = now.toLocaleTimeString();
@@ -69,43 +64,20 @@
                 month: 'long',
                 day: 'numeric'
             });
-
-            // Calculate time until next update
-            const nextUpdate = new Date(now);
-            nextUpdate.setMinutes(Math.ceil(minutes / 3) * 3);
-            const timeUntilUpdate = nextUpdate - new Date();
-            const minutesUntil = Math.floor(timeUntilUpdate / 60000);
-            const secondsUntil = Math.floor((timeUntilUpdate % 60000) / 1000);
-            
-            document.getElementById('next-update').textContent = 
-                `Next update in: ${minutesUntil}m ${secondsUntil}s`;
         }
 
         // Initial update
         updateClock();
 
-        // Update the countdown every second
+        // Update the clock when we hit an 11-minute mark
         setInterval(() => {
             const now = new Date();
             const currentMinutes = now.getMinutes();
             const currentSeconds = now.getSeconds();
             
-            // Only update the full display when we hit a 3-minute mark
-            if (currentMinutes % 3 === 0 && currentSeconds === 0) {
+            // Only update when we hit an 11-minute mark
+            if (currentMinutes % 11 === 0 && currentSeconds === 0) {
                 updateClock();
-            } else {
-                // Just update the countdown
-                const nextThreeMin = new Date(now);
-                nextThreeMin.setMinutes(Math.ceil(currentMinutes / 3) * 3);
-                nextThreeMin.setSeconds(0);
-                nextThreeMin.setMilliseconds(0);
-                
-                const timeUntilUpdate = nextThreeMin - now;
-                const minutesUntil = Math.floor(timeUntilUpdate / 60000);
-                const secondsUntil = Math.floor((timeUntilUpdate % 60000) / 1000);
-                
-                document.getElementById('next-update').textContent = 
-                    `Next update in: ${minutesUntil}m ${secondsUntil}s`;
             }
         }, 1000);
     </script>

@@ -17,13 +17,12 @@ const scraper = {
                 ],
                 headless: 'new'
             });
-            console.log('Browser initialized');
         }
         return this.browser;
     },
 
     async scrape(url) {
-        console.log(`Starting scrape for URL: ${url}`);
+        console.log(`🔍 Starting scrape of ${url}`);
         let browser = null;
         let page = null;
         
@@ -31,14 +30,12 @@ const scraper = {
             browser = await this.initBrowser();
             page = await browser.newPage();
 
-            // Set viewport and user agent
+            // Configure page settings (removed logging)
             await page.setViewport({ width: 1920, height: 1080 });
             await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-
-            // Set default timeout to 30 seconds
             page.setDefaultTimeout(30000);
 
-            // Enable request interception to block unnecessary resources
+            // Block unnecessary resources
             await page.setRequestInterception(true);
             page.on('request', (request) => {
                 const resourceType = request.resourceType();
@@ -49,86 +46,46 @@ const scraper = {
                 }
             });
 
-            // Add error handling for common scenarios
-            page.on('error', err => {
-                console.error('Page error:', err);
-            });
-
-            page.on('pageerror', err => {
-                console.error('Page error:', err);
-            });
-
-            // Navigate to the page with custom timeout and waitUntil conditions
-            console.log(`Navigating to ${url}...`);
             await page.goto(url, {
                 timeout: 30000,
                 waitUntil: ['domcontentloaded', 'networkidle2']
             });
 
-            // Wait for content to be available
             await page.waitForFunction(() => {
                 return document.body && document.body.innerHTML.length > 0;
             }, { timeout: 10000 });
 
-            // Get the page content
             const content = await page.evaluate(() => {
-                // Remove script tags and their content
                 const scripts = document.getElementsByTagName('script');
-                for (let script of scripts) {
-                    script.remove();
-                }
-                
-                // Remove style tags and their content
+                for (let script of scripts) script.remove();
                 const styles = document.getElementsByTagName('style');
-                for (let style of styles) {
-                    style.remove();
-                }
-                
-                // Get text content and normalize whitespace
-                return document.body.innerText
-                    .replace(/\\s+/g, ' ')
-                    .trim();
+                for (let style of styles) style.remove();
+                return document.body.innerText.replace(/\\s+/g, ' ').trim();
             });
 
-            // Collect debug information
             const debug = {
                 timestamp: new Date().toISOString(),
                 url: url,
                 status: 'success',
-                contentLength: content.length,
-                title: await page.title(),
-                metrics: await page.metrics()
+                contentLength: content.length
             };
 
-            console.log(`Scrape completed for ${url}`);
+            console.log(`✅ Finished scrape of ${url}`);
             return { content, debug };
 
         } catch (error) {
-            console.error('=== Scraper Error ===');
-            console.error(error);
-            console.error('Stack:', error.stack);
-
-            // Collect error debug information
-            const debug = {
-                timestamp: new Date().toISOString(),
-                url: url,
-                status: 'error',
-                error: error.message,
-                errorType: error.name,
-                stack: error.stack
-            };
-
-            // Return empty content with error debug info
+            console.error(`❌ Error scraping ${url}:`, error.message);
             return { 
                 content: `Error scraping content: ${error.message}`,
-                debug 
+                debug: {
+                    timestamp: new Date().toISOString(),
+                    url: url,
+                    status: 'error',
+                    error: error.message
+                }
             };
-
         } finally {
-            console.log('=== Scrape Process Complete ===');
-            if (page) {
-                await page.close().catch(console.error);
-            }
+            if (page) await page.close().catch(() => {});
         }
     },
 
@@ -142,12 +99,12 @@ const scraper = {
 
 // Cleanup on process exit
 process.on('SIGTERM', async () => {
-    console.log('SIGTERM received in scraper, cleaning up...');
+    console.log('Cleaning up scraper resources...');
     await scraper.cleanup();
 });
 
 process.on('SIGINT', async () => {
-    console.log('SIGINT received in scraper, cleaning up...');
+    console.log('Cleaning up scraper resources...');
     await scraper.cleanup();
 });
 

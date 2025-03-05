@@ -909,4 +909,95 @@ process.on('SIGTERM', () => {
         console.log('Server closed');
         process.exit(0);
     });
+});
+
+// Add these new endpoints near the other API endpoints
+
+// Stop all monitoring tasks
+app.post('/api/stop-all-monitoring', async (req, res) => {
+    try {
+        console.log('Stopping all monitoring tasks...');
+        
+        // Stop all cron tasks
+        for (const [urlId, task] of monitoringTasks.entries()) {
+            console.log(`Stopping monitoring for URL ID: ${urlId}`);
+            task.stop();
+        }
+        
+        // Clear the monitoring tasks map
+        monitoringTasks.clear();
+
+        // Update database to mark all URLs as inactive
+        await db.query(`
+            UPDATE monitored_urls 
+            SET is_active = false 
+            WHERE is_active = true
+        `);
+
+        // Update all subscribers to inactive
+        await db.query(`
+            UPDATE alert_subscribers 
+            SET is_active = false 
+            WHERE is_active = true
+        `);
+
+        res.json({
+            message: 'All monitoring tasks stopped successfully',
+            tasksStoppedCount: monitoringTasks.size
+        });
+    } catch (error) {
+        console.error('Error stopping monitoring tasks:', error);
+        res.status(500).json({ error: 'Failed to stop monitoring tasks' });
+    }
+});
+
+// Clear monitoring history
+app.post('/api/clear-history', async (req, res) => {
+    try {
+        console.log('Clearing monitoring history...');
+
+        // Delete completed alerts
+        const deletedAlerts = await db.query(`
+            DELETE FROM alerts_history 
+            WHERE email_sent = true 
+            AND sms_sent = true
+            RETURNING id
+        `);
+
+        // Delete inactive subscribers
+        const deletedSubscribers = await db.query(`
+            DELETE FROM alert_subscribers 
+            WHERE is_active = false 
+            AND NOT EXISTS (
+                SELECT 1 
+                FROM alerts_history 
+                WHERE alerts_history.subscriber_id = alert_subscribers.id
+            )
+            RETURNING id
+        `);
+
+        // Delete inactive URLs with no subscribers
+        const deletedUrls = await db.query(`
+            DELETE FROM monitored_urls 
+            WHERE is_active = false 
+            AND NOT EXISTS (
+                SELECT 1 
+                FROM alert_subscribers 
+                WHERE alert_subscribers.url_id = monitored_urls.id
+            )
+            RETURNING id
+        `);
+
+        res.json({
+            message: 'History cleared successfully',
+            deletedCounts: {
+                alerts: deletedAlerts.rows.length,
+                subscribers: deletedSubscribers.rows.length,
+                urls: deletedUrls.rows.length
+            }
+        });
+    } catch (error) {
+        console.error('Error clearing history:', error);
+        res.status(500).json({ error: 'Failed to clear history' });
+    }
 }); 
