@@ -157,54 +157,29 @@ db.connect(async (err) => {
     } else {
         console.log('Database connected successfully');
         try {
-            // First, check if the column exists
-            const columnCheck = await db.query(`
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = 'web_alerts' AND column_name = 'check_count'
+            // Initialize schema from schema.sql
+            console.log('Initializing database schema...');
+            const fs = require('fs');
+            const path = require('path');
+            const schemaPath = path.join(__dirname, 'models', 'schema.sql');
+            const schema = fs.readFileSync(schemaPath, 'utf8');
+            
+            // Execute schema creation
+            await db.query(schema);
+            console.log('Database schema initialized successfully');
+
+            // Start monitoring for any existing active URLs
+            const activeUrls = await db.query(`
+                SELECT id, website_url 
+                FROM monitored_urls 
+                WHERE is_active = true
             `);
 
-            if (columnCheck.rows.length === 0) {
-                console.log('Adding check_count column...');
-                // Add the column if it doesn't exist
-                await db.query(`
-                    ALTER TABLE web_alerts 
-                    ADD COLUMN IF NOT EXISTS check_count INTEGER DEFAULT 0,
-                    ADD COLUMN IF NOT EXISTS last_debug JSONB
-                `);
-                console.log('Added check_count and last_debug columns');
+            for (const url of activeUrls.rows) {
+                await startUrlMonitoring(url.id, url.website_url);
             }
+            console.log(`Resumed monitoring for ${activeUrls.rows.length} active URLs`);
 
-            // Create web_alerts table if it doesn't exist
-            await db.query(`
-                CREATE TABLE IF NOT EXISTS web_alerts (
-                    id SERIAL PRIMARY KEY,
-                    website_url TEXT NOT NULL,
-                    email VARCHAR(255) NOT NULL,
-                    phone_number VARCHAR(20) NOT NULL,
-                    polling_duration INTEGER NOT NULL,
-                    check_count INTEGER DEFAULT 0,
-                    last_check TIMESTAMP,
-                    last_content TEXT,
-                    last_debug JSONB,
-                    is_active BOOLEAN DEFAULT true,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
-            `);
-
-            // Create alerts_history table
-            await db.query(`
-                CREATE TABLE IF NOT EXISTS alerts_history (
-                    id SERIAL PRIMARY KEY,
-                    alert_id INTEGER REFERENCES web_alerts(id),
-                    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    email_sent BOOLEAN DEFAULT false,
-                    sms_sent BOOLEAN DEFAULT false,
-                    content_before TEXT,
-                    content_after TEXT
-                );
-            `);
-            console.log('Database schema initialized');
         } catch (error) {
             console.error('Error initializing database schema:', error);
             console.error('Error details:', error.stack);
@@ -219,6 +194,10 @@ app.get('/', (req, res) => {
 
 app.get('/status.html', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/public/status.html'));
+});
+
+app.get('/MOVING.html', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/public/MOVING.html'));
 });
 
 // Keep the health check endpoint
