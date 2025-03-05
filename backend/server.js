@@ -157,16 +157,66 @@ db.connect(async (err) => {
     } else {
         console.log('Database connected successfully');
         try {
-            // Initialize schema from schema.sql
+            // Initialize schema
             console.log('Initializing database schema...');
-            const fs = require('fs');
-            const path = require('path');
-            const schemaPath = path.join(__dirname, 'models', 'schema.sql');
-            const schema = fs.readFileSync(schemaPath, 'utf8');
             
-            // Execute schema creation
-            await db.query(schema);
+            // Create monitored_urls table
+            console.log('Creating monitored_urls table...');
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS monitored_urls (
+                    id SERIAL PRIMARY KEY,
+                    website_url TEXT NOT NULL UNIQUE,
+                    last_check TIMESTAMP,
+                    last_content TEXT,
+                    last_debug JSONB,
+                    check_count INTEGER DEFAULT 0,
+                    is_active BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+
+            // Create alert_subscribers table
+            console.log('Creating alert_subscribers table...');
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS alert_subscribers (
+                    id SERIAL PRIMARY KEY,
+                    url_id INTEGER REFERENCES monitored_urls(id),
+                    email VARCHAR(255) NOT NULL,
+                    phone_number VARCHAR(20) NOT NULL,
+                    polling_duration INTEGER NOT NULL,
+                    is_active BOOLEAN DEFAULT true,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            `);
+
+            // Create alerts_history table
+            console.log('Creating alerts_history table...');
+            await db.query(`
+                CREATE TABLE IF NOT EXISTS alerts_history (
+                    id SERIAL PRIMARY KEY,
+                    url_id INTEGER REFERENCES monitored_urls(id),
+                    subscriber_id INTEGER REFERENCES alert_subscribers(id),
+                    detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    email_sent BOOLEAN DEFAULT false,
+                    sms_sent BOOLEAN DEFAULT false,
+                    content_before TEXT,
+                    content_after TEXT
+                )
+            `);
+
             console.log('Database schema initialized successfully');
+
+            // Verify tables were created
+            const tables = ['monitored_urls', 'alert_subscribers', 'alerts_history'];
+            for (const table of tables) {
+                const result = await db.query(`
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_name = $1
+                    )
+                `, [table]);
+                console.log(`Table ${table} exists:`, result.rows[0].exists);
+            }
 
             // Start monitoring for any existing active URLs
             const activeUrls = await db.query(`
@@ -183,6 +233,14 @@ db.connect(async (err) => {
         } catch (error) {
             console.error('Error initializing database schema:', error);
             console.error('Error details:', error.stack);
+            // Log additional diagnostic information
+            console.error('Current directory:', process.cwd());
+            console.error('Environment:', process.env.NODE_ENV);
+            console.error('Database config:', {
+                host: process.env.DB_HOST,
+                database: process.env.DB_NAME,
+                port: process.env.DB_PORT
+            });
         }
     }
 });
