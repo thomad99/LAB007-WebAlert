@@ -1,138 +1,154 @@
 const puppeteer = require('puppeteer');
 
-async function scrape(url) {
-    console.log('\n=== Starting Scrape Process ===');
-    console.log('URL:', url);
-    console.log('Chrome Path:', process.env.PUPPETEER_EXECUTABLE_PATH);
+const scraper = {
+    browser: null,
     
-    let browser = null;
-    let debugInfo = {
-        steps: [],
-        content: null,
-        error: null
-    };
-
-    try {
-        debugInfo.steps.push('Launching browser...');
-        browser = await puppeteer.launch({
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--disable-gpu',
-                '--window-size=1920x1080'
-            ],
-            headless: 'new',
-            executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined
-        });
-        debugInfo.steps.push('Browser launched successfully');
-
-        // Log browser version
-        const version = await browser.version();
-        debugInfo.steps.push(`Browser version: ${version}`);
-
-        debugInfo.steps.push('Creating new page...');
-        const page = await browser.newPage();
-        
-        // Add more verbose page logging
-        page.on('console', msg => {
-            const text = `Page console: ${msg.type()}: ${msg.text()}`;
-            console.log(text);
-            debugInfo.steps.push(text);
-        });
-
-        page.on('pageerror', err => {
-            const text = `Page error: ${err.message}`;
-            console.error(text);
-            debugInfo.steps.push(text);
-        });
-
-        page.on('requestfailed', request => {
-            const text = `Failed request: ${request.url()} ${request.failure().errorText}`;
-            console.error(text);
-            debugInfo.steps.push(text);
-        });
-
-        debugInfo.steps.push('Setting viewport...');
-        await page.setViewport({ width: 1920, height: 1080 });
-
-        // Set a longer timeout and add navigation options
-        debugInfo.steps.push(`Navigating to ${url}...`);
-        const response = await page.goto(url, {
-            waitUntil: ['networkidle0', 'domcontentloaded'],
-            timeout: 60000 // 60 seconds timeout
-        });
-
-        const status = response.status();
-        debugInfo.steps.push(`Page loaded with status: ${status}`);
-        
-        if (status !== 200) {
-            throw new Error(`Page returned status ${status}`);
+    async initBrowser() {
+        if (!this.browser) {
+            console.log('Initializing browser...');
+            this.browser = await puppeteer.launch({
+                args: [
+                    '--no-sandbox',
+                    '--disable-setuid-sandbox',
+                    '--disable-dev-shm-usage',
+                    '--disable-accelerated-2d-canvas',
+                    '--disable-gpu',
+                    '--window-size=1920x1080'
+                ],
+                headless: 'new'
+            });
+            console.log('Browser initialized');
         }
+        return this.browser;
+    },
 
-        debugInfo.steps.push('Waiting for body...');
-        await page.waitForSelector('body', { timeout: 10000 });
+    async scrape(url) {
+        console.log(`Starting scrape for URL: ${url}`);
+        let browser = null;
+        let page = null;
+        
+        try {
+            browser = await this.initBrowser();
+            page = await browser.newPage();
 
-        // Take a screenshot before content extraction
-        debugInfo.steps.push('Taking screenshot...');
-        const screenshot = await page.screenshot({ 
-            fullPage: true,
-            encoding: 'base64'
-        });
-        debugInfo.screenshot = `data:image/png;base64,${screenshot}`;
+            // Set viewport and user agent
+            await page.setViewport({ width: 1920, height: 1080 });
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
 
-        // Extract content with more details
-        debugInfo.steps.push('Extracting content...');
-        const content = await page.evaluate(() => {
-            // Remove unwanted elements
-            const elementsToRemove = document.querySelectorAll('script, style, iframe, noscript');
-            elementsToRemove.forEach(el => el.remove());
+            // Set default timeout to 30 seconds
+            page.setDefaultTimeout(30000);
 
-            // Get both text and HTML
-            const text = document.body.innerText;
-            const html = document.body.innerHTML;
+            // Enable request interception to block unnecessary resources
+            await page.setRequestInterception(true);
+            page.on('request', (request) => {
+                const resourceType = request.resourceType();
+                if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+                    request.abort();
+                } else {
+                    request.continue();
+                }
+            });
 
-            return {
-                text,
-                html,
-                textLength: text.length,
-                htmlLength: html.length
+            // Add error handling for common scenarios
+            page.on('error', err => {
+                console.error('Page error:', err);
+            });
+
+            page.on('pageerror', err => {
+                console.error('Page error:', err);
+            });
+
+            // Navigate to the page with custom timeout and waitUntil conditions
+            console.log(`Navigating to ${url}...`);
+            await page.goto(url, {
+                timeout: 30000,
+                waitUntil: ['domcontentloaded', 'networkidle2']
+            });
+
+            // Wait for content to be available
+            await page.waitForFunction(() => {
+                return document.body && document.body.innerHTML.length > 0;
+            }, { timeout: 10000 });
+
+            // Get the page content
+            const content = await page.evaluate(() => {
+                // Remove script tags and their content
+                const scripts = document.getElementsByTagName('script');
+                for (let script of scripts) {
+                    script.remove();
+                }
+                
+                // Remove style tags and their content
+                const styles = document.getElementsByTagName('style');
+                for (let style of styles) {
+                    style.remove();
+                }
+                
+                // Get text content and normalize whitespace
+                return document.body.innerText
+                    .replace(/\\s+/g, ' ')
+                    .trim();
+            });
+
+            // Collect debug information
+            const debug = {
+                timestamp: new Date().toISOString(),
+                url: url,
+                status: 'success',
+                contentLength: content.length,
+                title: await page.title(),
+                metrics: await page.metrics()
             };
-        });
 
-        debugInfo.content = content;
-        debugInfo.steps.push(`Content extracted - Text length: ${content.textLength}, HTML length: ${content.htmlLength}`);
+            console.log(`Scrape completed for ${url}`);
+            return { content, debug };
 
-        // Log sample of content
-        console.log('\nContent Sample:');
-        console.log(content.text.substring(0, 200) + '...\n');
+        } catch (error) {
+            console.error('=== Scraper Error ===');
+            console.error(error);
+            console.error('Stack:', error.stack);
 
-        return {
-            content: content.text,
-            debug: debugInfo
-        };
-    } catch (error) {
-        console.error('\n=== Scraper Error ===');
-        console.error('Error:', error.message);
-        console.error('Stack:', error.stack);
+            // Collect error debug information
+            const debug = {
+                timestamp: new Date().toISOString(),
+                url: url,
+                status: 'error',
+                error: error.message,
+                errorType: error.name,
+                stack: error.stack
+            };
 
-        debugInfo.error = {
-            message: error.message,
-            stack: error.stack
-        };
-        debugInfo.steps.push(`Error: ${error.message}`);
-        throw error;
-    } finally {
-        if (browser) {
-            debugInfo.steps.push('Closing browser...');
-            await browser.close();
-            debugInfo.steps.push('Browser closed');
-            console.log('=== Scrape Process Complete ===\n');
+            // Return empty content with error debug info
+            return { 
+                content: `Error scraping content: ${error.message}`,
+                debug 
+            };
+
+        } finally {
+            console.log('=== Scrape Process Complete ===');
+            if (page) {
+                await page.close().catch(console.error);
+            }
+        }
+    },
+
+    async cleanup() {
+        if (this.browser) {
+            await this.browser.close();
+            this.browser = null;
         }
     }
-}
+};
 
-module.exports = {
-    scrape
-}; 
+// Cleanup on process exit
+process.on('SIGTERM', async () => {
+    console.log('SIGTERM received in scraper, cleaning up...');
+    await scraper.cleanup();
+});
+
+process.on('SIGINT', async () => {
+    console.log('SIGINT received in scraper, cleaning up...');
+    await scraper.cleanup();
+});
+
+module.exports = scraper; 

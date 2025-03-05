@@ -48,6 +48,11 @@ const monitoringTasks = new Map();
 
 // Function to start monitoring a URL
 async function startUrlMonitoring(urlId, websiteUrl) {
+    if (!urlId || !websiteUrl) {
+        console.error('Invalid parameters for startUrlMonitoring:', { urlId, websiteUrl });
+        throw new Error('Invalid monitoring parameters');
+    }
+
     if (monitoringTasks.has(urlId)) {
         console.log(`Monitoring already active for URL ID ${urlId}`);
         return;
@@ -55,6 +60,26 @@ async function startUrlMonitoring(urlId, websiteUrl) {
 
     console.log(`Starting monitoring for URL ID ${urlId}: ${websiteUrl}`);
     let previousContent = null;
+
+    try {
+        // Initial scrape to get starting content
+        const initialScrape = await scraper.scrape(websiteUrl);
+        previousContent = initialScrape.content;
+        
+        // Update initial state in database
+        await db.query(`
+            UPDATE monitored_urls 
+            SET last_check = NOW(), 
+                last_content = $1, 
+                last_debug = $2 
+            WHERE id = $3
+        `, [initialScrape.content, JSON.stringify(initialScrape.debug), urlId]);
+
+        console.log(`Initial scrape completed for URL ID ${urlId}`);
+    } catch (error) {
+        console.error(`Error during initial scrape for URL ID ${urlId}:`, error);
+        // Continue with monitoring despite initial scrape error
+    }
 
     const task = cron.schedule('*/5 * * * *', async () => {
         try {
@@ -71,7 +96,7 @@ async function startUrlMonitoring(urlId, websiteUrl) {
 
             // Update last check and content
             await db.query(
-                'UPDATE monitored_urls SET last_check = NOW(), last_content = $1, last_debug = $2 WHERE id = $1',
+                'UPDATE monitored_urls SET last_check = NOW(), last_content = $1, last_debug = $2 WHERE id = $3',
                 [content, JSON.stringify(debug), urlId]
             );
 
@@ -93,32 +118,38 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                         AND NOW() < as.created_at + (as.polling_duration || ' minutes')::interval
                 `, [urlId]);
 
-                // Record change and notify each subscriber
-                for (const subscriber of subscribers.rows) {
-                    try {
-                        // Record the change
-                        const alertRecord = await db.query(`
-                            INSERT INTO alerts_history 
-                                (url_id, subscriber_id, content_before, content_after) 
-                            VALUES ($1, $2, $3, $4) 
-                            RETURNING id
-                        `, [urlId, subscriber.id, previousContent, content]);
+                if (subscribers.rows && subscribers.rows.length > 0) {
+                    // Record change and notify each subscriber
+                    for (const subscriber of subscribers.rows) {
+                        try {
+                            // Record the change
+                            const alertRecord = await db.query(`
+                                INSERT INTO alerts_history 
+                                    (url_id, subscriber_id, content_before, content_after) 
+                                VALUES ($1, $2, $3, $4) 
+                                RETURNING id
+                            `, [urlId, subscriber.id, previousContent, content]);
 
-                        // Send notifications
-                        await Promise.all([
-                            emailService.sendAlert(subscriber.email, websiteUrl)
-                                .then(() => db.query(
-                                    'UPDATE alerts_history SET email_sent = true WHERE id = $1',
-                                    [alertRecord.rows[0].id]
-                                )),
-                            smsService.sendAlert(subscriber.phone_number, websiteUrl)
-                                .then(() => db.query(
-                                    'UPDATE alerts_history SET sms_sent = true WHERE id = $1',
-                                    [alertRecord.rows[0].id]
-                                ))
-                        ]);
-                    } catch (error) {
-                        console.error(`Error notifying subscriber ${subscriber.id}:`, error);
+                            if (alertRecord.rows && alertRecord.rows.length > 0) {
+                                // Send notifications
+                                await Promise.all([
+                                    emailService.sendAlert(subscriber.email, websiteUrl)
+                                        .then(() => db.query(
+                                            'UPDATE alerts_history SET email_sent = true WHERE id = $1',
+                                            [alertRecord.rows[0].id]
+                                        ))
+                                        .catch(error => console.error(`Email notification failed for subscriber ${subscriber.id}:`, error)),
+                                    smsService.sendAlert(subscriber.phone_number, websiteUrl)
+                                        .then(() => db.query(
+                                            'UPDATE alerts_history SET sms_sent = true WHERE id = $1',
+                                            [alertRecord.rows[0].id]
+                                        ))
+                                        .catch(error => console.error(`SMS notification failed for subscriber ${subscriber.id}:`, error))
+                                ]);
+                            }
+                        } catch (error) {
+                            console.error(`Error notifying subscriber ${subscriber.id}:`, error);
+                        }
                     }
                 }
             }
@@ -135,7 +166,7 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                     AND NOW() < created_at + (polling_duration || ' minutes')::interval
             `, [urlId]);
 
-            if (parseInt(activeSubscribers.rows[0].count) === 0) {
+            if (!activeSubscribers.rows || activeSubscribers.rows.length === 0 || parseInt(activeSubscribers.rows[0].count) === 0) {
                 console.log(`No active subscribers left for URL ID ${urlId}, stopping monitoring`);
                 task.stop();
                 monitoringTasks.delete(urlId);
@@ -273,6 +304,17 @@ app.post('/api/monitor', async (req, res) => {
     const { websiteUrl, email, phone, duration } = req.body;
 
     try {
+        // Validate required fields
+        if (!websiteUrl || !email || !phone || !duration) {
+            return res.status(400).json({
+                error: 'Missing required fields',
+                required: ['websiteUrl', 'email', 'phone', 'duration'],
+                received: { websiteUrl, email, phone, duration }
+            });
+        }
+
+        console.log('Starting monitoring for:', { websiteUrl, email, phone, duration });
+
         // First, get or create the monitored URL
         let urlRecord = await db.query(
             'SELECT * FROM monitored_urls WHERE website_url = $1',
@@ -280,18 +322,31 @@ app.post('/api/monitor', async (req, res) => {
         );
 
         let urlId;
-        if (urlRecord.rows.length === 0) {
+        if (!urlRecord.rows || urlRecord.rows.length === 0) {
             // New URL to monitor
+            console.log('Creating new URL record for:', websiteUrl);
             const newUrl = await db.query(
-                'INSERT INTO monitored_urls (website_url, is_active) VALUES ($1, true) RETURNING id',
+                'INSERT INTO monitored_urls (website_url, is_active) VALUES ($1, true) RETURNING *',
                 [websiteUrl]
             );
+            
+            if (!newUrl.rows || newUrl.rows.length === 0) {
+                throw new Error('Failed to create URL record');
+            }
+            
             urlId = newUrl.rows[0].id;
+            console.log('Created new URL record with ID:', urlId);
         } else {
             urlId = urlRecord.rows[0].id;
+            console.log('Found existing URL record with ID:', urlId);
+        }
+
+        if (!urlId) {
+            throw new Error('Failed to get or create URL record');
         }
 
         // Create subscriber record
+        console.log('Creating subscriber record...');
         const subscriber = await db.query(`
             INSERT INTO alert_subscribers 
                 (url_id, email, phone_number, polling_duration) 
@@ -299,17 +354,35 @@ app.post('/api/monitor', async (req, res) => {
             RETURNING *
         `, [urlId, email, phone, duration]);
 
+        if (!subscriber.rows || subscriber.rows.length === 0) {
+            throw new Error('Failed to create subscriber record');
+        }
+
+        console.log('Created subscriber record:', subscriber.rows[0]);
+
         // Start monitoring if not already active
-        await startUrlMonitoring(urlId, websiteUrl);
+        if (!monitoringTasks.has(urlId)) {
+            console.log('Starting monitoring for URL ID:', urlId);
+            await startUrlMonitoring(urlId, websiteUrl);
+        } else {
+            console.log('Monitoring already active for URL ID:', urlId);
+        }
 
         res.json({
             message: 'Monitoring started successfully',
-            subscriber: subscriber.rows[0]
+            urlId: urlId,
+            subscriber: subscriber.rows[0],
+            isNewUrl: !urlRecord.rows || urlRecord.rows.length === 0
         });
 
     } catch (error) {
         console.error('Error starting monitoring:', error);
-        res.status(500).json({ error: 'Failed to start monitoring' });
+        console.error('Stack:', error.stack);
+        res.status(500).json({ 
+            error: 'Failed to start monitoring',
+            message: error.message,
+            details: error.stack
+        });
     }
 });
 
