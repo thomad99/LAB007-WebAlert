@@ -208,10 +208,19 @@
                 const tableBody = document.getElementById('statusTableBody');
                 tableBody.innerHTML = '';
 
+                if (!data || data.length === 0) {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td colspan="6" style="text-align: center;">No active monitoring tasks</td>
+                    `;
+                    tableBody.appendChild(row);
+                    return;
+                }
+
                 data.forEach(item => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td>${item.website_url}</td>
+                        <td>${item.website_url || 'N/A'}</td>
                         <td>
                             <span class="badge ${item.is_active ? 'badge-active' : 'badge-inactive'}">
                                 ${item.is_active ? 'Active' : 'Inactive'}
@@ -230,7 +239,14 @@
                 });
             } catch (error) {
                 console.error('Error loading status:', error);
-                alert('Failed to load status data');
+                const tableBody = document.getElementById('statusTableBody');
+                tableBody.innerHTML = `
+                    <tr>
+                        <td colspan="6" style="text-align: center; color: #dc3545;">
+                            Error loading status data. Please try refreshing the page.
+                        </td>
+                    </tr>
+                `;
             }
         }
 
@@ -262,6 +278,29 @@
                 console.error('Error clearing history:', error);
                 alert('Failed to clear history');
             }
+        }
+
+        // Add function to stop individual monitoring
+        async function stopMonitoring(id) {
+            if (!id) return;
+            
+            showConfirmModal(
+                'Stop Monitoring',
+                'Are you sure you want to stop monitoring this URL?',
+                async () => {
+                    try {
+                        const response = await fetch(`/api/stop-monitoring/${id}`, {
+                            method: 'POST'
+                        });
+                        const result = await response.json();
+                        console.log('Monitoring stopped:', result);
+                        loadStatus(); // Refresh the table
+                    } catch (error) {
+                        console.error('Error stopping monitoring:', error);
+                        alert('Failed to stop monitoring');
+                    }
+                }
+            );
         }
 
         // Event listeners

@@ -392,24 +392,31 @@ app.get('/api/status', async (req, res) => {
         console.log('Fetching status from database...');
         const result = await db.query(`
             SELECT 
-                id,
-                website_url,
-                email,
-                phone_number,
-                polling_duration,
-                check_count,
-                last_check,
-                is_active,
-                created_at,
-                EXTRACT(EPOCH FROM (created_at + (polling_duration || ' minutes')::interval) - NOW())/60 as minutes_left
-            FROM web_alerts
-            ORDER BY created_at DESC
+                mu.id,
+                mu.website_url,
+                mu.last_check,
+                mu.check_count,
+                mu.is_active,
+                mu.created_at,
+                as2.email,
+                as2.phone_number,
+                as2.polling_duration,
+                EXTRACT(EPOCH FROM (as2.created_at + (as2.polling_duration || ' minutes')::interval) - NOW())/60 as minutes_left
+            FROM monitored_urls mu
+            LEFT JOIN alert_subscribers as2 ON mu.id = as2.url_id
+            WHERE mu.is_active = true OR as2.is_active = true
+            ORDER BY mu.created_at DESC
         `);
+        
         console.log('Status query result:', result.rows);
         res.json(result.rows);
     } catch (error) {
         console.error('Error fetching status:', error);
-        res.status(500).json({ error: 'Failed to fetch monitoring status' });
+        console.error('Error details:', error.stack);
+        res.status(500).json({ 
+            error: 'Failed to fetch monitoring status',
+            details: error.message
+        });
     }
 });
 
@@ -999,5 +1006,43 @@ app.post('/api/clear-history', async (req, res) => {
     } catch (error) {
         console.error('Error clearing history:', error);
         res.status(500).json({ error: 'Failed to clear history' });
+    }
+});
+
+// Add endpoint to stop individual monitoring
+app.post('/api/stop-monitoring/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        console.log(`Stopping monitoring for URL ID: ${id}`);
+
+        // Stop the cron task if it exists
+        if (monitoringTasks.has(parseInt(id))) {
+            monitoringTasks.get(parseInt(id)).stop();
+            monitoringTasks.delete(parseInt(id));
+        }
+
+        // Update database to mark URL and subscribers as inactive
+        await db.query(`
+            UPDATE monitored_urls 
+            SET is_active = false 
+            WHERE id = $1
+        `, [id]);
+
+        await db.query(`
+            UPDATE alert_subscribers 
+            SET is_active = false 
+            WHERE url_id = $1
+        `, [id]);
+
+        res.json({
+            message: 'Monitoring stopped successfully',
+            urlId: id
+        });
+    } catch (error) {
+        console.error('Error stopping monitoring:', error);
+        res.status(500).json({ 
+            error: 'Failed to stop monitoring',
+            details: error.message 
+        });
     }
 }); 
