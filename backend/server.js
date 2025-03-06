@@ -106,16 +106,16 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                 // Get all active subscribers for this URL
                 const subscribers = await db.query(`
                     SELECT 
-                        as.id as subscriber_id,
-                        as.email,
-                        as.phone_number,
-                        as.polling_duration,
-                        as.created_at + (as.polling_duration || ' minutes')::interval as end_time
-                    FROM alert_subscribers as
+                        subs.id as subscriber_id,
+                        subs.email,
+                        subs.phone_number,
+                        subs.polling_duration,
+                        subs.created_at + (subs.polling_duration || ' minutes')::interval as end_time
+                    FROM alert_subscribers subs
                     WHERE 
-                        as.url_id = $1 
-                        AND as.is_active = true
-                        AND NOW() < as.created_at + (as.polling_duration || ' minutes')::interval
+                        subs.url_id = $1 
+                        AND subs.is_active = true
+                        AND NOW() < subs.created_at + (subs.polling_duration || ' minutes')::interval
                 `, [urlId]);
 
                 if (subscribers.rows && subscribers.rows.length > 0) {
