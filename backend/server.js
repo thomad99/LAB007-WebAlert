@@ -66,7 +66,6 @@ async function startUrlMonitoring(urlId, websiteUrl) {
         const initialScrape = await scraper.scrape(websiteUrl);
         previousContent = initialScrape.content;
         
-        // Update initial state in database
         await db.query(`
             UPDATE monitored_urls 
             SET last_check = NOW(), 
@@ -78,11 +77,27 @@ async function startUrlMonitoring(urlId, websiteUrl) {
         console.log(`Initial scrape completed for URL ID ${urlId}`);
     } catch (error) {
         console.error(`Error during initial scrape for URL ID ${urlId}:`, error);
-        // Continue with monitoring despite initial scrape error
     }
 
     const task = cron.schedule('*/5 * * * *', async () => {
         try {
+            // Check if there are any active subscribers before proceeding
+            const activeSubscribers = await db.query(`
+                SELECT COUNT(*) 
+                FROM alert_subscribers 
+                WHERE url_id = $1 
+                AND is_active = true
+                AND NOW() < created_at + (polling_duration || ' minutes')::interval
+            `, [urlId]);
+
+            if (!activeSubscribers.rows[0] || parseInt(activeSubscribers.rows[0].count) === 0) {
+                console.log(`No active subscribers left for URL ID ${urlId}, stopping monitoring`);
+                task.stop();
+                monitoringTasks.delete(urlId);
+                await db.query('UPDATE monitored_urls SET is_active = false WHERE id = $1', [urlId]);
+                return;
+            }
+
             console.log(`Checking URL ID ${urlId}: ${websiteUrl}`);
             
             // Update check count
@@ -106,72 +121,50 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                 // Get all active subscribers for this URL
                 const subscribers = await db.query(`
                     SELECT 
-                        subs.id as subscriber_id,
-                        subs.email,
-                        subs.phone_number,
-                        subs.polling_duration,
-                        subs.created_at + (subs.polling_duration || ' minutes')::interval as end_time
-                    FROM alert_subscribers subs
-                    WHERE 
-                        subs.url_id = $1 
-                        AND subs.is_active = true
-                        AND NOW() < subs.created_at + (subs.polling_duration || ' minutes')::interval
+                        id as subscriber_id,
+                        email,
+                        phone_number
+                    FROM alert_subscribers 
+                    WHERE url_id = $1 
+                    AND is_active = true
+                    AND NOW() < created_at + (polling_duration || ' minutes')::interval
                 `, [urlId]);
 
+                // Record the change once
+                const changeRecord = await db.query(`
+                    INSERT INTO alerts_history 
+                        (monitored_url_id, detected_at, content_before, content_after) 
+                    VALUES ($1, NOW(), $2, $3) 
+                    RETURNING id
+                `, [urlId, previousContent, content]);
+
+                // Notify all subscribers
                 if (subscribers.rows && subscribers.rows.length > 0) {
-                    // Record change and notify each subscriber
                     for (const subscriber of subscribers.rows) {
                         try {
-                            // Record the change
-                            const alertRecord = await db.query(`
-                                INSERT INTO alerts_history 
-                                    (url_id, subscriber_id, content_before, content_after) 
-                                VALUES ($1, $2, $3, $4) 
-                                RETURNING id
-                            `, [urlId, subscriber.id, previousContent, content]);
-
-                            if (alertRecord.rows && alertRecord.rows.length > 0) {
-                                // Send notifications
-                                await Promise.all([
-                                    emailService.sendAlert(subscriber.email, websiteUrl)
-                                        .then(() => db.query(
-                                            'UPDATE alerts_history SET email_sent = true WHERE id = $1',
-                                            [alertRecord.rows[0].id]
-                                        ))
-                                        .catch(error => console.error(`Email notification failed for subscriber ${subscriber.id}:`, error)),
-                                    smsService.sendAlert(subscriber.phone_number, websiteUrl)
-                                        .then(() => db.query(
-                                            'UPDATE alerts_history SET sms_sent = true WHERE id = $1',
-                                            [alertRecord.rows[0].id]
-                                        ))
-                                        .catch(error => console.error(`SMS notification failed for subscriber ${subscriber.id}:`, error))
-                                ]);
-                            }
+                            // Send notifications
+                            await Promise.all([
+                                emailService.sendAlert(subscriber.email, websiteUrl)
+                                    .then(() => db.query(
+                                        'UPDATE alerts_history SET email_sent = true WHERE id = $1',
+                                        [changeRecord.rows[0].id]
+                                    ))
+                                    .catch(error => console.error(`Email notification failed for subscriber ${subscriber.subscriber_id}:`, error)),
+                                smsService.sendAlert(subscriber.phone_number, websiteUrl)
+                                    .then(() => db.query(
+                                        'UPDATE alerts_history SET sms_sent = true WHERE id = $1',
+                                        [changeRecord.rows[0].id]
+                                    ))
+                                    .catch(error => console.error(`SMS notification failed for subscriber ${subscriber.subscriber_id}:`, error))
+                            ]);
                         } catch (error) {
-                            console.error(`Error notifying subscriber ${subscriber.id}:`, error);
+                            console.error(`Error notifying subscriber ${subscriber.subscriber_id}:`, error);
                         }
                     }
                 }
             }
 
             previousContent = content;
-
-            // Check if monitoring should continue
-            const activeSubscribers = await db.query(`
-                SELECT COUNT(*) 
-                FROM alert_subscribers 
-                WHERE 
-                    url_id = $1 
-                    AND is_active = true
-                    AND NOW() < created_at + (polling_duration || ' minutes')::interval
-            `, [urlId]);
-
-            if (!activeSubscribers.rows || activeSubscribers.rows.length === 0 || parseInt(activeSubscribers.rows[0].count) === 0) {
-                console.log(`No active subscribers left for URL ID ${urlId}, stopping monitoring`);
-                task.stop();
-                monitoringTasks.delete(urlId);
-                await db.query('UPDATE monitored_urls SET is_active = false WHERE id = $1', [urlId]);
-            }
 
         } catch (error) {
             console.error(`Error in monitoring task for URL ID ${urlId}:`, error);
@@ -225,7 +218,7 @@ db.connect(async (err) => {
             await db.query(`
                 CREATE TABLE IF NOT EXISTS alerts_history (
                     id SERIAL PRIMARY KEY,
-                    url_id INTEGER REFERENCES monitored_urls(id),
+                    monitored_url_id INTEGER REFERENCES monitored_urls(id),
                     subscriber_id INTEGER REFERENCES alert_subscribers(id),
                     detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     email_sent BOOLEAN DEFAULT false,
@@ -406,7 +399,53 @@ app.post('/api/monitor', async (req, res) => {
 app.get('/api/status', async (req, res) => {
     try {
         console.log('Fetching status from database...');
+        
+        // First, stop any expired monitoring tasks
+        const expiredTasks = await db.query(`
+            SELECT DISTINCT mu.id, mu.website_url
+            FROM monitored_urls mu
+            LEFT JOIN alert_subscribers subs ON mu.id = subs.url_id
+            WHERE mu.is_active = true
+            AND (
+                subs.id IS NULL
+                OR NOT EXISTS (
+                    SELECT 1 FROM alert_subscribers 
+                    WHERE url_id = mu.id 
+                    AND is_active = true 
+                    AND NOW() < created_at + (polling_duration || ' minutes')::interval
+                )
+            )
+        `);
+
+        // Stop expired tasks
+        for (const task of expiredTasks.rows) {
+            console.log(`Stopping expired monitoring for URL ID ${task.id}: ${task.website_url}`);
+            if (monitoringTasks.has(task.id)) {
+                monitoringTasks.get(task.id).stop();
+                monitoringTasks.delete(task.id);
+            }
+            await db.query('UPDATE monitored_urls SET is_active = false WHERE id = $1', [task.id]);
+            await db.query('UPDATE alert_subscribers SET is_active = false WHERE url_id = $1', [task.id]);
+        }
+
+        // Now get the status of remaining active tasks
         const result = await db.query(`
+            WITH active_subscribers AS (
+                SELECT 
+                    url_id,
+                    COUNT(*) as subscriber_count,
+                    MAX(created_at + (polling_duration || ' minutes')::interval) as latest_end_time
+                FROM alert_subscribers
+                WHERE is_active = true
+                GROUP BY url_id
+            ),
+            change_counts AS (
+                SELECT 
+                    monitored_url_id,
+                    COUNT(DISTINCT detected_at) as changes_count
+                FROM alerts_history
+                GROUP BY monitored_url_id
+            )
             SELECT 
                 mu.id,
                 mu.website_url,
@@ -418,25 +457,27 @@ app.get('/api/status', async (req, res) => {
                 subs.phone_number,
                 subs.polling_duration,
                 EXTRACT(EPOCH FROM (subs.created_at + (subs.polling_duration || ' minutes')::interval) - NOW())/60 as minutes_left,
-                COALESCE((
-                    SELECT COUNT(*) 
-                    FROM alerts_history 
-                    WHERE url_id = mu.id
-                ), 0) as changes_count
+                COALESCE(cc.changes_count, 0) as changes_count,
+                as_count.subscriber_count
             FROM monitored_urls mu
-            LEFT JOIN alert_subscribers subs ON mu.id = subs.url_id AND subs.is_active = true
+            LEFT JOIN alert_subscribers subs ON mu.id = subs.url_id 
+                AND subs.is_active = true
+                AND NOW() < subs.created_at + (subs.polling_duration || ' minutes')::interval
+            LEFT JOIN change_counts cc ON cc.monitored_url_id = mu.id
+            LEFT JOIN active_subscribers as_count ON as_count.url_id = mu.id
             WHERE mu.is_active = true 
             ORDER BY mu.created_at DESC
         `);
         
-        // Ensure we're sending valid JSON
+        // Format the results
         const formattedResults = result.rows.map(row => ({
             ...row,
             last_check: row.last_check ? row.last_check.toISOString() : null,
             created_at: row.created_at ? row.created_at.toISOString() : null,
             minutes_left: Math.max(0, Math.round(row.minutes_left || 0)),
             changes_count: parseInt(row.changes_count || 0),
-            check_count: parseInt(row.check_count || 0)
+            check_count: parseInt(row.check_count || 0),
+            subscriber_count: parseInt(row.subscriber_count || 0)
         }));
 
         console.log('Sending formatted status response:', formattedResults);
