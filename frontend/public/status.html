@@ -213,54 +213,68 @@
         async function loadStatus() {
             try {
                 const response = await fetch('/api/status');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
                 const data = await response.json();
-                const tableBody = document.getElementById('statusTableBody');
-                tableBody.innerHTML = '';
+                
+                const statusTableBody = document.getElementById('statusTableBody');
+                statusTableBody.innerHTML = '';
 
                 if (!data || data.length === 0) {
-                    const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td colspan="7" style="text-align: center;">No active monitoring tasks</td>
-                    `;
-                    tableBody.appendChild(row);
+                    statusTableBody.innerHTML = `
+                        <tr>
+                            <td colspan="7" class="text-center">No active monitoring tasks</td>
+                        </tr>`;
                     return;
                 }
 
                 data.forEach(item => {
+                    if (!item) return; // Skip if item is undefined
+
                     const row = document.createElement('tr');
+                    
+                    // Format the last check time
+                    const lastCheck = item.last_check ? new Date(item.last_check).toLocaleString() : 'Never';
+                    
+                    // Calculate time left
+                    const minutesLeft = Math.max(0, Math.round(item.minutes_left || 0));
+                    
+                    // Create status badge
+                    const statusBadge = item.is_active 
+                        ? '<span class="badge badge-success">Active</span>' 
+                        : '<span class="badge badge-secondary">Inactive</span>';
+
+                    // Create changes badge
+                    const changesBadge = parseInt(item.changes_count || 0) > 0
+                        ? `<span class="badge badge-warning">${item.changes_count}</span>`
+                        : '<span class="badge badge-secondary">0</span>';
+
                     row.innerHTML = `
                         <td>${item.website_url || 'N/A'}</td>
-                        <td>
-                            <span class="badge ${item.is_active ? 'badge-active' : 'badge-inactive'}">
-                                ${item.is_active ? 'Active' : 'Inactive'}
-                            </span>
-                        </td>
-                        <td>${formatDate(item.last_check)}</td>
+                        <td>${statusBadge}</td>
+                        <td>${lastCheck}</td>
                         <td>${item.check_count || 0}</td>
+                        <td>${changesBadge}</td>
+                        <td>${minutesLeft} minutes</td>
                         <td>
-                            <span class="badge ${parseInt(item.changes_count) > 0 ? 'badge-warning' : 'badge-secondary'}">
-                                ${item.changes_count || 0}
-                            </span>
-                        </td>
-                        <td>${formatTimeLeft(item.minutes_left)}</td>
-                        <td>
-                            <button class="button button-danger" onclick="stopMonitoring(${item.id})">
+                            <button class="btn btn-danger btn-sm" onclick="stopMonitoring(${item.id})">
                                 Stop
                             </button>
                         </td>
                     `;
-                    tableBody.appendChild(row);
+                    
+                    statusTableBody.appendChild(row);
                 });
             } catch (error) {
                 console.error('Error loading status:', error);
-                const tableBody = document.getElementById('statusTableBody');
-                tableBody.innerHTML = `
+                const statusTableBody = document.getElementById('statusTableBody');
+                statusTableBody.innerHTML = `
                     <tr>
-                        <td colspan="7" style="text-align: center; color: #dc3545;">
-                            Error loading status data. Please try refreshing the page.
+                        <td colspan="7" class="text-center text-danger">
+                            Error loading status data: ${error.message}
                         </td>
-                    </tr>
-                `;
+                    </tr>`;
             }
         }
 
@@ -296,6 +310,11 @@
 
         // Add function to stop individual monitoring
         async function stopMonitoring(id) {
+            if (!id) {
+                console.error('Invalid ID provided to stopMonitoring');
+                return;
+            }
+
             if (!id) return;
             
             showConfirmModal(

@@ -414,17 +414,17 @@ app.get('/api/status', async (req, res) => {
                 mu.check_count,
                 mu.is_active,
                 mu.created_at,
-                as2.email,
-                as2.phone_number,
-                as2.polling_duration,
-                EXTRACT(EPOCH FROM (as2.created_at + (as2.polling_duration || ' minutes')::interval) - NOW())/60 as minutes_left,
+                subs.email,
+                subs.phone_number,
+                subs.polling_duration,
+                EXTRACT(EPOCH FROM (subs.created_at + (subs.polling_duration || ' minutes')::interval) - NOW())/60 as minutes_left,
                 COALESCE((
                     SELECT COUNT(*) 
-                    FROM alerts_history ah
-                    WHERE ah.url_id = mu.id
+                    FROM alerts_history 
+                    WHERE url_id = mu.id
                 ), 0) as changes_count
             FROM monitored_urls mu
-            LEFT JOIN alert_subscribers as2 ON mu.id = as2.url_id AND as2.is_active = true
+            LEFT JOIN alert_subscribers subs ON mu.id = subs.url_id AND subs.is_active = true
             WHERE mu.is_active = true 
             ORDER BY mu.created_at DESC
         `);
