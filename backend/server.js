@@ -418,27 +418,36 @@ app.get('/api/status', async (req, res) => {
                 as2.phone_number,
                 as2.polling_duration,
                 EXTRACT(EPOCH FROM (as2.created_at + (as2.polling_duration || ' minutes')::interval) - NOW())/60 as minutes_left,
-                (
+                COALESCE((
                     SELECT COUNT(*) 
-                    FROM alerts_history 
-                    WHERE alerts_history.url_id = mu.id
-                ) as changes_count
+                    FROM alerts_history ah
+                    WHERE ah.url_id = mu.id
+                ), 0) as changes_count
             FROM monitored_urls mu
-            LEFT JOIN alert_subscribers as2 ON mu.id = as2.url_id
+            LEFT JOIN alert_subscribers as2 ON mu.id = as2.url_id AND as2.is_active = true
             WHERE mu.is_active = true 
-            GROUP BY mu.id, mu.website_url, mu.last_check, mu.check_count, mu.is_active, mu.created_at,
-                     as2.email, as2.phone_number, as2.polling_duration, as2.created_at
             ORDER BY mu.created_at DESC
         `);
         
-        console.log('Status query result:', result.rows);
-        res.json(result.rows);
+        // Ensure we're sending valid JSON
+        const formattedResults = result.rows.map(row => ({
+            ...row,
+            last_check: row.last_check ? row.last_check.toISOString() : null,
+            created_at: row.created_at ? row.created_at.toISOString() : null,
+            minutes_left: Math.max(0, Math.round(row.minutes_left || 0)),
+            changes_count: parseInt(row.changes_count || 0),
+            check_count: parseInt(row.check_count || 0)
+        }));
+
+        console.log('Sending formatted status response:', formattedResults);
+        res.json(formattedResults);
     } catch (error) {
         console.error('Error fetching status:', error);
         console.error('Error details:', error.stack);
         res.status(500).json({ 
             error: 'Failed to fetch monitoring status',
-            details: error.message
+            message: error.message,
+            timestamp: new Date().toISOString()
         });
     }
 });
