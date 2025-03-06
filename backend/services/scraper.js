@@ -23,13 +23,13 @@ const scraper = {
 
     async scrape(url) {
         console.log(`🔍 Starting scrape of ${url}`);
-        let browser = null;
+        let page = null;
         try {
-            browser = await this.initBrowser();
-            const page = await browser.newPage();
+            const browser = await this.initBrowser();
+            page = await browser.newPage();
             
             // Set longer timeout and optimize page load
-            await page.setDefaultNavigationTimeout(60000); // Increase to 60 seconds
+            await page.setDefaultNavigationTimeout(60000);
             await page.setDefaultTimeout(60000);
             
             // Block unnecessary resources
@@ -56,7 +56,7 @@ const scraper = {
                     });
 
                     // Wait for any dynamic content to load
-                    await page.waitForTimeout(2000);
+                    await new Promise(resolve => setTimeout(resolve, 2000));
 
                     content = await page.content();
                     break;
@@ -65,7 +65,7 @@ const scraper = {
                     console.log(`Attempt failed, ${retries - 1} retries left:`, err.message);
                     retries--;
                     if (retries > 0) {
-                        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds before retry
+                        await new Promise(resolve => setTimeout(resolve, 5000));
                     }
                 }
             }
@@ -81,7 +81,7 @@ const scraper = {
                 contentLength: content.length
             };
 
-            await browser.close();
+            await page.close();
             return { content, debug };
 
         } catch (error) {
@@ -93,11 +93,10 @@ const scraper = {
                 error: error.message
             };
 
-            if (browser) {
-                await browser.close();
+            if (page) {
+                await page.close();
             }
 
-            // Return a more informative error message
             return {
                 content: `Error scraping content: ${error.message}`,
                 debug: debug

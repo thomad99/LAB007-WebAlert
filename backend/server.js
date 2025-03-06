@@ -125,7 +125,7 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                             // Record the change
                             const alertRecord = await db.query(`
                                 INSERT INTO alerts_history 
-                                    (monitored_url_id, subscriber_id, content_before, content_after) 
+                                    (url_id, subscriber_id, content_before, content_after) 
                                 VALUES ($1, $2, $3, $4) 
                                 RETURNING id
                             `, [urlId, subscriber.id, previousContent, content]);
@@ -225,7 +225,7 @@ db.connect(async (err) => {
             await db.query(`
                 CREATE TABLE IF NOT EXISTS alerts_history (
                     id SERIAL PRIMARY KEY,
-                    monitored_url_id INTEGER REFERENCES monitored_urls(id),
+                    url_id INTEGER REFERENCES monitored_urls(id),
                     subscriber_id INTEGER REFERENCES alert_subscribers(id),
                     detected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     email_sent BOOLEAN DEFAULT false,
@@ -421,7 +421,7 @@ app.get('/api/status', async (req, res) => {
                 (
                     SELECT COUNT(*) 
                     FROM alerts_history 
-                    WHERE alerts_history.monitored_url_id = mu.id
+                    WHERE alerts_history.url_id = mu.id
                 ) as changes_count
             FROM monitored_urls mu
             LEFT JOIN alert_subscribers as2 ON mu.id = as2.url_id
