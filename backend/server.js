@@ -301,11 +301,16 @@ app.get('/health', (req, res) => {
 
 // API endpoint to start monitoring
 app.post('/api/monitor', async (req, res) => {
-    const { websiteUrl, email, phone, duration } = req.body;
+    let { websiteUrl, email, phone, duration } = req.body;
 
     try {
         // Log the incoming request
         console.log('Received monitoring request:', { websiteUrl, email, phone, duration });
+
+        // Normalize the URL
+        if (websiteUrl.toLowerCase().includes('moving.html')) {
+            websiteUrl = websiteUrl.replace(/moving\.html/i, 'MOVING.html');
+        }
 
         // Validate required fields
         if (!websiteUrl || !email || !phone || !duration) {

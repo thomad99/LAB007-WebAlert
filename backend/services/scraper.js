@@ -13,7 +13,7 @@ const scraper = {
                     '--disable-dev-shm-usage',
                     '--disable-accelerated-2d-canvas',
                     '--disable-gpu',
-                    '--window-size=1920x1080'
+                    '--disable-extensions'
                 ],
                 headless: 'new'
             });
@@ -24,44 +24,55 @@ const scraper = {
     async scrape(url) {
         console.log(`🔍 Starting scrape of ${url}`);
         let browser = null;
-        let page = null;
-        
         try {
             browser = await this.initBrowser();
-            page = await browser.newPage();
-
-            // Configure page settings (removed logging)
-            await page.setViewport({ width: 1920, height: 1080 });
-            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
-            page.setDefaultTimeout(30000);
-
+            const page = await browser.newPage();
+            
+            // Set longer timeout and optimize page load
+            await page.setDefaultNavigationTimeout(60000); // Increase to 60 seconds
+            await page.setDefaultTimeout(60000);
+            
             // Block unnecessary resources
             await page.setRequestInterception(true);
             page.on('request', (request) => {
                 const resourceType = request.resourceType();
-                if (['image', 'stylesheet', 'font', 'media'].includes(resourceType)) {
+                if (resourceType === 'image' || resourceType === 'stylesheet' || resourceType === 'font') {
                     request.abort();
                 } else {
                     request.continue();
                 }
             });
 
-            await page.goto(url, {
-                timeout: 30000,
-                waitUntil: ['domcontentloaded', 'networkidle2']
-            });
+            // Add retry logic
+            let retries = 3;
+            let content = null;
+            let error = null;
 
-            await page.waitForFunction(() => {
-                return document.body && document.body.innerHTML.length > 0;
-            }, { timeout: 10000 });
+            while (retries > 0 && !content) {
+                try {
+                    await page.goto(url, {
+                        waitUntil: 'networkidle0',
+                        timeout: 60000
+                    });
 
-            const content = await page.evaluate(() => {
-                const scripts = document.getElementsByTagName('script');
-                for (let script of scripts) script.remove();
-                const styles = document.getElementsByTagName('style');
-                for (let style of styles) style.remove();
-                return document.body.innerText.replace(/\\s+/g, ' ').trim();
-            });
+                    // Wait for any dynamic content to load
+                    await page.waitForTimeout(2000);
+
+                    content = await page.content();
+                    break;
+                } catch (err) {
+                    error = err;
+                    console.log(`Attempt failed, ${retries - 1} retries left:`, err.message);
+                    retries--;
+                    if (retries > 0) {
+                        await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5 seconds before retry
+                    }
+                }
+            }
+
+            if (!content) {
+                throw error || new Error('Failed to fetch content after all retries');
+            }
 
             const debug = {
                 timestamp: new Date().toISOString(),
@@ -70,22 +81,27 @@ const scraper = {
                 contentLength: content.length
             };
 
-            console.log(`✅ Finished scrape of ${url}`);
+            await browser.close();
             return { content, debug };
 
         } catch (error) {
             console.error(`❌ Error scraping ${url}:`, error.message);
-            return { 
-                content: `Error scraping content: ${error.message}`,
-                debug: {
-                    timestamp: new Date().toISOString(),
-                    url: url,
-                    status: 'error',
-                    error: error.message
-                }
+            const debug = {
+                timestamp: new Date().toISOString(),
+                url: url,
+                status: 'error',
+                error: error.message
             };
-        } finally {
-            if (page) await page.close().catch(() => {});
+
+            if (browser) {
+                await browser.close();
+            }
+
+            // Return a more informative error message
+            return {
+                content: `Error scraping content: ${error.message}`,
+                debug: debug
+            };
         }
     },
 
