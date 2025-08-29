@@ -195,28 +195,28 @@ async function startUrlMonitoring(urlId, websiteUrl) {
 
                     // Notify all subscribers
                     if (subscribers.rows && subscribers.rows.length > 0) {
-                    for (const subscriber of subscribers.rows) {
-                        try {
-                            // Send notifications
-                            await Promise.all([
-                                emailService.sendAlert(subscriber.email, websiteUrl, previousContent, content)
-                                    .then(() => db.query(
-                                        'UPDATE alerts_history SET email_sent = true WHERE id = $1',
-                                        [changeRecord.rows[0].id]
-                                    ))
-                                    .catch(error => console.error(`Email notification failed for subscriber ${subscriber.subscriber_id}:`, error)),
-                                smsService.sendAlert(subscriber.phone_number, websiteUrl)
-                                    .then(() => db.query(
-                                        'UPDATE alerts_history SET sms_sent = true WHERE id = $1',
-                                        [changeRecord.rows[0].id]
-                                    ))
-                                    .catch(error => console.error(`SMS notification failed for subscriber ${subscriber.subscriber_id}:`, error))
-                            ]);
-                        } catch (error) {
-                            console.error(`Error notifying subscriber ${subscriber.subscriber_id}:`, error);
+                        for (const subscriber of subscribers.rows) {
+                            try {
+                                // Send notifications
+                                await Promise.all([
+                                    emailService.sendAlert(subscriber.email, websiteUrl, previousContent, content)
+                                        .then(() => db.query(
+                                            'UPDATE alerts_history SET email_sent = true WHERE id = $1',
+                                            [changeRecord.rows[0].id]
+                                        ))
+                                        .catch(error => console.error(`Email notification failed for subscriber ${subscriber.subscriber_id}:`, error)),
+                                    smsService.sendAlert(subscriber.phone_number, websiteUrl)
+                                        .then(() => db.query(
+                                            'UPDATE alerts_history SET sms_sent = true WHERE id = $1',
+                                            [changeRecord.rows[0].id]
+                                        ))
+                                        .catch(error => console.error(`SMS notification failed for subscriber ${subscriber.subscriber_id}:`, error))
+                                ]);
+                            } catch (error) {
+                                console.error(`Error notifying subscriber ${subscriber.subscriber_id}:`, error);
+                            }
                         }
                     }
-                }
             }
 
             previousContent = content;
