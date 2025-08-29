@@ -20,14 +20,14 @@ RUN apt-get update \
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files first for better caching
+COPY package.json ./
 
-# Install dependencies with specific flags for Render
-RUN npm install --omit=dev --no-audit --no-fund \
+# Install production dependencies only (more reliable than npm ci for Render)
+RUN npm install --omit=dev --no-audit --no-fund --production \
     && npm cache clean --force
 
-# Copy source
+# Copy source code
 COPY . .
 
 # Ensure proper permissions for Chrome
