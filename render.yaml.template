@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: web-alert
+    env: docker
+    dockerCommand: node backend/server.js
+    buildCommand: npm install
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: EMAIL_USER
+        sync: false
+      - key: EMAIL_PASSWORD
+        sync: false
+      # ... other non-sensitive vars ... 

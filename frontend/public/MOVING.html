@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Page - Updates Every 11 Minutes</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+        }
+        .clock-container {
+            background: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        .time {
+            font-size: 3rem;
+            font-weight: bold;
+            color: #1a73e8;
+            margin: 1rem 0;
+        }
+        .date {
+            font-size: 1.5rem;
+            color: #5f6368;
+            margin-bottom: 1rem;
+        }
+        .update-info {
+            color: #80868b;
+            font-size: 0.9rem;
+        }
+        
+        .logo-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .logo {
+            max-width: 150px;
+            height: auto;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="logo-container">
+        <img src="/lab007-trans.PNG" alt="LAB007 Logo" class="logo">
+    </div>
+    <div class="clock-container">
+        <h1>Test Page - 11 Minute Updates</h1>
+        <div class="date" id="date">Loading...</div>
+        <div class="time" id="time">Loading...</div>
+        <div class="update-info">This page updates every 11 minutes</div>
+    </div>
+
+    <script>
+        function updateClock() {
+            const now = new Date();
+            // Round down to the nearest 11 minutes
+            now.setSeconds(0);
+            now.setMilliseconds(0);
+            const minutes = now.getMinutes();
+            now.setMinutes(Math.floor(minutes / 11) * 11);
+
+            // Update time display
+            document.getElementById('time').textContent = now.toLocaleTimeString();
+            document.getElementById('date').textContent = now.toLocaleDateString(undefined, {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric'
+            });
+        }
+
+        // Initial update
+        updateClock();
+
+        // Update the clock when we hit an 11-minute mark
+        setInterval(() => {
+            const now = new Date();
+            const currentMinutes = now.getMinutes();
+            const currentSeconds = now.getSeconds();
+            
+            // Only update when we hit an 11-minute mark
+            if (currentMinutes % 11 === 0 && currentSeconds === 0) {
+                updateClock();
+            }
+        }, 1000);
+    </script>
+</body>
+</html> 

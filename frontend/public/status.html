@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Alert Status</title>
+    <link rel="stylesheet" href="/src/styles/status.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 20px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .logo-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .logo {
+            max-width: 200px;
+            height: auto;
+            margin-bottom: 15px;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+        .button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .button-primary {
+            background-color: #007bff;
+            color: white;
+        }
+        .button-danger {
+            background-color: #dc3545;
+            color: white;
+        }
+        .button-warning {
+            background-color: #ffc107;
+            color: black;
+        }
+        .button:hover {
+            opacity: 0.9;
+        }
+        .status-table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status-table th, .status-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        .status-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+        }
+        .status-table tr:hover {
+            background-color: #f8f9fa;
+        }
+        .badge {
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .badge-active {
+            background-color: #28a745;
+            color: white;
+        }
+        .badge-inactive {
+            background-color: #dc3545;
+            color: white;
+        }
+        .badge-warning {
+            background-color: #ffc107;
+            color: #000;
+        }
+        .badge-secondary {
+            background-color: #6c757d;
+            color: white;
+        }
+        
+        .text-muted {
+            color: #6c757d;
+            font-style: italic;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        .modal-content {
+            background-color: white;
+            margin: 15% auto;
+            padding: 20px;
+            border-radius: 8px;
+            width: 80%;
+            max-width: 500px;
+        }
+        .close {
+            float: right;
+            cursor: pointer;
+            font-size: 24px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo-container">
+            <img src="/lab007-trans.PNG" alt="LAB007 Logo" class="logo">
+        </div>
+        <div class="header">
+            <h1>Web Alert Status - All Monitoring Jobs</h1>
+            <p style="margin: 10px 0; color: #6c757d; font-size: 0.9em;">
+                Shows all monitoring jobs (active and completed). Completed jobs are preserved until you manually clear them.
+            </p>
+            <div class="controls">
+                <button id="refreshButton" class="button button-primary">
+                    🔄 Refresh
+                </button>
+                <button id="stopAllButton" class="button button-danger">
+                    🛑 Stop All Scrapes
+                </button>
+                <button id="clearHistoryButton" class="button button-warning">
+                    🗑️ Clear Completed Jobs
+                </button>
+            </div>
+        </div>
+        
+        <table class="status-table">
+            <thead>
+                <tr>
+                    <th>URL</th>
+                    <th>Status</th>
+                    <th>Last Check</th>
+                    <th>Check Count</th>
+                    <th>Changes</th>
+                    <th>Time Left</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="statusTableBody">
+                <!-- Data will be populated here -->
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="modalTitle"></h2>
+            <p id="modalMessage"></p>
+            <div style="text-align: right; margin-top: 20px;">
+                <button class="button button-primary" id="modalCancel">Cancel</button>
+                <button class="button button-danger" id="modalConfirm">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Utility function to format date
+        function formatDate(dateString) {
+            if (!dateString) return 'Never';
+            const date = new Date(dateString);
+            return date.toLocaleString();
+        }
+
+        // Function to format time left
+        function formatTimeLeft(minutes) {
+            if (minutes <= 0) return 'Expired';
+            if (minutes < 60) return `${Math.round(minutes)}m`;
+            return `${Math.round(minutes / 60)}h ${Math.round(minutes % 60)}m`;
+        }
+
+        // Function to show confirmation modal
+        function showConfirmModal(title, message, onConfirm) {
+            const modal = document.getElementById('confirmModal');
+            const modalTitle = document.getElementById('modalTitle');
+            const modalMessage = document.getElementById('modalMessage');
+            const confirmBtn = document.getElementById('modalConfirm');
+            const cancelBtn = document.getElementById('modalCancel');
+            const closeBtn = document.querySelector('.close');
+
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            modal.style.display = 'block';
+
+            confirmBtn.onclick = () => {
+                onConfirm();
+                modal.style.display = 'none';
+            };
+
+            cancelBtn.onclick = closeBtn.onclick = () => {
+                modal.style.display = 'none';
+            };
+
+            window.onclick = (event) => {
+                if (event.target === modal) {
+                    modal.style.display = 'none';
+                }
+            };
+        }
+
+        // Function to load status data
+        async function loadStatus() {
+            try {
+                const response = await fetch('/api/status');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                
+                const statusTableBody = document.getElementById('statusTableBody');
+                statusTableBody.innerHTML = '';
+
+                if (!data || data.length === 0) {
+                    statusTableBody.innerHTML = `
+                        <tr>
+                            <td colspan="7" style="text-align: center;">No active monitoring tasks</td>
+                        </tr>`;
+                    return;
+                }
+
+                data.forEach(item => {
+                    if (!item) return; // Skip if item is undefined
+
+                    const row = document.createElement('tr');
+                    
+                    // Format the last check time
+                    const lastCheck = item.last_check ? new Date(item.last_check).toLocaleString() : 'Never';
+                    
+                    // Calculate time left
+                    const minutesLeft = Math.max(0, Math.round(item.minutes_left || 0));
+                    
+                    // Create status badge based on the status field
+                    let statusBadge;
+                    if (item.status === 'Active') {
+                        statusBadge = '<span class="badge badge-success">Active</span>';
+                    } else if (item.status === 'Completed') {
+                        statusBadge = '<span class="badge badge-secondary">Completed</span>';
+                    } else {
+                        statusBadge = '<span class="badge badge-secondary">Unknown</span>';
+                    }
+
+                    // Create changes badge
+                    const changesBadge = parseInt(item.changes_count || 0) > 0
+                        ? `<span class="badge badge-warning">${item.changes_count}</span>`
+                        : '<span class="badge badge-secondary">0</span>';
+
+                    row.innerHTML = `
+                        <td>${item.website_url || 'N/A'}</td>
+                        <td>${statusBadge}</td>
+                        <td>${lastCheck}</td>
+                        <td>${item.check_count || 0}</td>
+                        <td>${changesBadge}</td>
+                        <td>${item.status === 'Completed' ? 'Completed' : `${minutesLeft} minutes`}</td>
+                        <td>
+                            ${item.status === 'Active' 
+                                ? `<button class="button button-danger" onclick="stopMonitoring(${item.id})">Stop</button>`
+                                : '<span class="text-muted">-</span>'
+                            }
+                        </td>
+                    `;
+                    
+                    statusTableBody.appendChild(row);
+                });
+            } catch (error) {
+                console.error('Error loading status:', error);
+                const statusTableBody = document.getElementById('statusTableBody');
+                statusTableBody.innerHTML = `
+                    <tr>
+                        <td colspan="7" style="text-align: center; color: #dc3545;">
+                            Error loading status data: ${error.message}
+                        </td>
+                    </tr>`;
+            }
+        }
+
+        // Function to stop all monitoring
+        async function stopAllMonitoring() {
+            try {
+                const response = await fetch('/api/stop-all-monitoring', {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                console.log('All monitoring stopped:', result);
+                loadStatus(); // Refresh the table
+            } catch (error) {
+                console.error('Error stopping monitoring:', error);
+                alert('Failed to stop monitoring');
+            }
+        }
+
+        // Function to clear history
+        async function clearHistory() {
+            try {
+                const response = await fetch('/api/clear-history', {
+                    method: 'POST'
+                });
+                const result = await response.json();
+                console.log('History cleared:', result);
+                loadStatus(); // Refresh the table
+            } catch (error) {
+                console.error('Error clearing history:', error);
+                alert('Failed to clear history');
+            }
+        }
+
+        // Add function to stop individual monitoring
+        async function stopMonitoring(id) {
+            if (!id) {
+                console.error('Invalid ID provided to stopMonitoring');
+                return;
+            }
+
+            if (!id) return;
+            
+            showConfirmModal(
+                'Stop Monitoring',
+                'Are you sure you want to stop monitoring this URL?',
+                async () => {
+                    try {
+                        const response = await fetch(`/api/stop-monitoring/${id}`, {
+                            method: 'POST'
+                        });
+                        const result = await response.json();
+                        console.log('Monitoring stopped:', result);
+                        loadStatus(); // Refresh the table
+                    } catch (error) {
+                        console.error('Error stopping monitoring:', error);
+                        alert('Failed to stop monitoring');
+                    }
+                }
+            );
+        }
+
+        // Event listeners
+        document.getElementById('refreshButton').onclick = loadStatus;
+
+        document.getElementById('stopAllButton').onclick = () => {
+            showConfirmModal(
+                'Stop All Scrapes',
+                'Are you sure you want to stop all active scraping tasks?',
+                stopAllMonitoring
+            );
+        };
+
+        document.getElementById('clearHistoryButton').onclick = () => {
+            showConfirmModal(
+                'Clear Completed Jobs',
+                'Are you sure you want to clear all completed monitoring jobs? This will remove them from the status page permanently.',
+                clearHistory
+            );
+        };
+
+        // Initial load
+        loadStatus();
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadStatus, 30000);
+    </script>
+</body>
+</html> 
