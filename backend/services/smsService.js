@@ -1,22 +1,30 @@
-const twilio = require('twilio');
+// Mock SMS service - logs messages instead of sending them
+console.log('Initializing Mock SMS service...');
+console.log('SMS messages will be logged to console instead of sent');
 
-// Add debug logging for Twilio client initialization
-let client;
-try {
-    console.log('Initializing Twilio client...');
-    console.log('Account SID exists:', !!process.env.TWILIO_ACCOUNT_SID);
-    console.log('Auth Token exists:', !!process.env.TWILIO_AUTH_TOKEN);
-    console.log('Phone number:', process.env.TWILIO_PHONE_NUMBER);
-    
-    client = twilio(
-        process.env.TWILIO_ACCOUNT_SID,
-        process.env.TWILIO_AUTH_TOKEN
-    );
-    console.log('Twilio client initialized successfully');
-} catch (error) {
-    console.error('Error initializing Twilio client:', error);
-    throw error;
-}
+// Mock client for compatibility
+const client = {
+    messages: {
+        create: async (messageData) => {
+            console.log('📱 MOCK SMS SENT:', messageData);
+            return {
+                sid: 'mock_' + Date.now(),
+                status: 'delivered',
+                to: messageData.to,
+                from: messageData.from
+            };
+        }
+    },
+    api: {
+        accounts: () => ({
+            fetch: async () => ({
+                status: 'active',
+                type: 'mock',
+                friendlyName: 'Mock SMS Service'
+            })
+        })
+    }
+};
 
 // Helper function to format phone numbers
 function formatPhoneNumber(phone) {
