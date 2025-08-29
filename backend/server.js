@@ -185,13 +185,13 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                         AND NOW() < created_at + (polling_duration || ' minutes')::interval
                     `, [urlId]);
 
-                // Record the change once
-                const changeRecord = await db.query(`
-                    INSERT INTO alerts_history 
-                        (monitored_url_id, detected_at, content_before, content_after) 
-                    VALUES ($1, NOW(), $2, $3) 
-                    RETURNING id
-                `, [urlId, previousContent, content]);
+                    // Record the change once
+                    const changeRecord = await db.query(`
+                        INSERT INTO alerts_history 
+                            (monitored_url_id, detected_at, content_before, content_after) 
+                        VALUES ($1, NOW(), $2, $3) 
+                        RETURNING id
+                    `, [urlId, previousContent, content]);
 
                 // Notify all subscribers
                 if (subscribers.rows && subscribers.rows.length > 0) {
