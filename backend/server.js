@@ -217,9 +217,9 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                             }
                         }
                     }
-            }
+                }
 
-            previousContent = content;
+                previousContent = content;
 
         } catch (error) {
             console.error(`Error in monitoring task for URL ID ${urlId}:`, error);
