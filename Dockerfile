@@ -24,7 +24,7 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies with specific flags for Render
-RUN npm ci --only=production --no-audit --no-fund \
+RUN npm install --omit=dev --no-audit --no-fund \
     && npm cache clean --force
 
 # Copy source

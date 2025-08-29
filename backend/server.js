@@ -199,7 +199,7 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                         try {
                             // Send notifications
                             await Promise.all([
-                                emailService.sendAlert(subscriber.email, websiteUrl)
+                                emailService.sendAlert(subscriber.email, websiteUrl, previousContent, content)
                                     .then(() => db.query(
                                         'UPDATE alerts_history SET email_sent = true WHERE id = $1',
                                         [changeRecord.rows[0].id]
@@ -847,7 +847,10 @@ app.get('/api/test-email', async (req, res) => {
     
     try {
         console.log('Testing email service...');
-        const result = await emailService.sendAlert(testEmail, testUrl);
+        // Sample content changes for testing
+        const sampleContentBefore = "Welcome to our sailing website. We offer sailing lessons and boat rentals.";
+        const sampleContentAfter = "Welcome to our sailing website. We offer sailing lessons, boat rentals, and yacht charters.";
+        const result = await emailService.sendAlert(testEmail, testUrl, sampleContentBefore, sampleContentAfter);
         res.json({
             success: true,
             message: 'Test email sent successfully',
