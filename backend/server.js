@@ -173,17 +173,17 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                     console.log(`Change detected for URL ID ${urlId}`);
                     changesDetected++;
 
-                // Get all active subscribers for this URL
-                const subscribers = await db.query(`
-                    SELECT 
-                        id as subscriber_id,
-                        email,
-                        phone_number
-                    FROM alert_subscribers 
-                    WHERE url_id = $1 
-                    AND is_active = true
-                    AND NOW() < created_at + (polling_duration || ' minutes')::interval
-                `, [urlId]);
+                    // Get all active subscribers for this URL
+                    const subscribers = await db.query(`
+                        SELECT 
+                            id as subscriber_id,
+                            email,
+                            phone_number
+                        FROM alert_subscribers 
+                        WHERE url_id = $1 
+                        AND is_active = true
+                        AND NOW() < created_at + (polling_duration || ' minutes')::interval
+                    `, [urlId]);
 
                 // Record the change once
                 const changeRecord = await db.query(`
