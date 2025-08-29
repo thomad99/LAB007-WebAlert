@@ -537,7 +537,7 @@ app.get('/api/status', async (req, res) => {
                 COALESCE(cc.changes_count, 0) as changes_count,
                 COALESCE(as_count.subscriber_count, 0) as subscriber_count,
                 CASE 
-                    WHEN lsi.id IS NOT NULL AND lsi.is_active = true AND NOW() < lsi.created_at + (lsi.polling_duration || ' minutes')::interval
+                    WHEN lsi.url_id IS NOT NULL AND lsi.is_active = true AND NOW() < lsi.created_at + (lsi.polling_duration || ' minutes')::interval
                     THEN 'Active'
                     ELSE 'Completed'
                 END as status_text
@@ -634,6 +634,8 @@ app.get('/api/test-db', async (req, res) => {
 // Add route logging middleware at the top
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
+    console.log('Request body:', req.body);
+    console.log('Request query:', req.query);
     next();
 });
 
@@ -848,18 +850,29 @@ app.get('/api/test-email', async (req, res) => {
     const testUrl = req.query.url || 'https://example.com';
     
     try {
+        console.log('=== EMAIL TEST STARTED ===');
+        console.log('Test parameters:', { testEmail, testUrl });
         console.log('Testing email service...');
+        
         // Sample content changes for testing
         const sampleContentBefore = "Welcome to our sailing website. We offer sailing lessons and boat rentals.";
         const sampleContentAfter = "Welcome to our sailing website. We offer sailing lessons, boat rentals, and yacht charters.";
+        
+        console.log('Calling emailService.sendAlert...');
         const result = await emailService.sendAlert(testEmail, testUrl, sampleContentBefore, sampleContentAfter);
-        res.json({
+        console.log('Email service result:', result);
+        
+        const response = {
             success: true,
             message: 'Test email sent successfully',
             details: result
-        });
+        };
+        console.log('Sending success response:', response);
+        res.json(response);
     } catch (error) {
-        console.error('Test email failed:', error);
+        console.error('=== EMAIL TEST FAILED ===');
+        console.error('Error details:', error);
+        console.error('Error stack:', error.stack);
         res.status(500).json({
             success: false,
             error: error.message,
@@ -874,26 +887,35 @@ app.get('/api/test-sms', async (req, res) => {
     const testUrl = req.query.url || 'https://example.com';
     
     try {
+        console.log('=== SMS TEST STARTED ===');
+        console.log('Test parameters:', { testPhone, testUrl });
+        
         // First test the connection
+        console.log('Testing SMS service connection...');
         const connectionTest = await smsService.testConnection();
-        console.log('Twilio connection test:', connectionTest);
+        console.log('SMS connection test result:', connectionTest);
 
         if (connectionTest.status === 'error') {
             throw new Error(`SMS service connection failed: ${connectionTest.error}`);
         }
 
         // Then try to send a message
-        console.log('Testing SMS service...');
+        console.log('Calling smsService.sendAlert...');
         const result = await smsService.sendAlert(testPhone, testUrl);
+        console.log('SMS service result:', result);
         
-        res.json({
+        const response = {
             success: true,
             message: 'Test SMS sent successfully',
             connectionTest,
             smsResult: result
-        });
+        };
+        console.log('Sending success response:', response);
+        res.json(response);
     } catch (error) {
-        console.error('Test SMS failed:', error);
+        console.error('=== SMS TEST FAILED ===');
+        console.error('Error details:', error);
+        console.error('Error stack:', error.stack);
         res.status(500).json({
             success: false,
             error: error.message,
@@ -1288,4 +1310,89 @@ app.post('/api/stop-monitoring/:id', async (req, res) => {
             details: error.message 
         });
     }
-}); 
+});
+
+// Add POST handlers for the test endpoints
+app.post('/api/test-email', async (req, res) => {
+    const { email, subject, message } = req.body;
+    
+    try {
+        console.log('=== POST EMAIL TEST STARTED ===');
+        console.log('Request body:', { email, subject, message });
+        console.log('Testing email service...');
+        
+        // Sample content changes for testing
+        const sampleContentBefore = "Welcome to our sailing website. We offer sailing lessons and boat rentals.";
+        const sampleContentAfter = "Welcome to our sailing website. We offer sailing lessons, boat rentals, and yacht charters.";
+        
+        console.log('Calling emailService.sendAlert...');
+        const result = await emailService.sendAlert(email, 'https://example.com', sampleContentBefore, sampleContentAfter);
+        console.log('Email service result:', result);
+        
+        const response = {
+            success: true,
+            message: 'Test email sent successfully',
+            emailId: result.messageId || 'mock_' + Date.now(),
+            status: 'Sent',
+            message: 'Email delivered'
+        };
+        console.log('Sending success response:', response);
+        res.json(response);
+    } catch (error) {
+        console.error('=== POST EMAIL TEST FAILED ===');
+        console.error('Error details:', error);
+        console.error('Error stack:', error.stack);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            stack: error.stack
+        });
+    }
+});
+
+app.post('/api/test-sms', async (req, res) => {
+    const { phone, message } = req.body;
+    
+    try {
+        console.log('=== POST SMS TEST STARTED ===');
+        console.log('Request body:', { phone, message });
+        
+        // First test the connection
+        console.log('Testing SMS service connection...');
+        const connectionTest = await smsService.testConnection();
+        console.log('SMS connection test result:', connectionTest);
+
+        if (connectionTest.status === 'error') {
+            throw new Error(`SMS service connection failed: ${connectionTest.error}`);
+        }
+
+        // Then try to send a message
+        console.log('Calling smsService.sendAlert...');
+        const result = await smsService.sendAlert(phone, 'https://example.com');
+        console.log('SMS service result:', result);
+        
+        const response = {
+            success: true,
+            message: 'Test SMS sent successfully',
+            smsId: result.sid || 'mock_' + Date.now(),
+            status: 'Sent',
+            message: 'SMS delivered'
+        };
+        console.log('Sending success response:', response);
+        res.json(response);
+    } catch (error) {
+        console.error('=== POST SMS TEST FAILED ===');
+        console.error('Error details:', error);
+        console.error('Error stack:', error.stack);
+        res.status(500).json({
+            success: false,
+            error: error.message,
+            code: error.code,
+            connectionTest: await smsService.testConnection(),
+            smsConfig: {
+                method: 'email-to-sms-gateway',
+                status: 'configured'
+            }
+        });
+    }
+});
