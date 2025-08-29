@@ -42,6 +42,7 @@
             cursor: pointer;
             font-weight: bold;
             margin-right: 10px;
+            margin-bottom: 10px;
         }
         .btn-primary {
             background-color: #007bff;
@@ -54,6 +55,10 @@
         .btn-warning {
             background-color: #ffc107;
             color: black;
+        }
+        .btn-info {
+            background-color: #17a2b8;
+            color: white;
         }
         .result-box {
             margin-top: 15px;
@@ -76,6 +81,7 @@
             margin-top: 20px;
             color: #007bff;
             text-decoration: none;
+            margin-right: 15px;
         }
         .status-link:hover {
             text-decoration: underline;
@@ -95,6 +101,31 @@
         .header {
             text-align: center;
         }
+
+        .test-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .test-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            background-color: #f8f9fa;
+        }
+
+        .test-card h3 {
+            margin-top: 0;
+            color: #333;
+        }
+
+        @media (max-width: 768px) {
+            .test-grid {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
@@ -104,175 +135,201 @@
         </div>
         <div class="header">
             <h1>🧪 Test Notifications</h1>
-            <p>Test the welcome and summary notification system</p>
+            <p>Test the email and SMS notification services directly</p>
             <a href="/" class="status-link">← Back to Main</a>
             <a href="/status.html" class="status-link">View Monitoring Status</a>
         </div>
 
-        <div class="test-section">
-            <h2>📧 Test Welcome Notifications</h2>
-            <p>Send a welcome email and SMS when monitoring starts</p>
-            
-            <div class="form-group">
-                <label for="welcomeEmail">Email Address:</label>
-                <input type="email" id="welcomeEmail" class="form-control" value="test@example.com">
+        <div class="test-grid">
+            <!-- Email Testing Section -->
+            <div class="test-card">
+                <h3>📧 Test Email Service</h3>
+                <p>Test email notifications without monitoring</p>
+                
+                <div class="form-group">
+                    <label for="testEmail">Email Address:</label>
+                    <input type="email" id="testEmail" class="form-control" value="test@example.com" placeholder="Enter email to test">
+                </div>
+                
+                <div class="form-group">
+                    <label for="testEmailSubject">Subject (optional):</label>
+                    <input type="text" id="testEmailSubject" class="form-control" value="Test Email from Web-Alert" placeholder="Custom subject line">
+                </div>
+                
+                <div class="form-group">
+                    <label for="testEmailMessage">Message (optional):</label>
+                    <textarea id="testEmailMessage" class="form-control" rows="3" placeholder="Custom message content">This is a test email from your Web-Alert system to verify the email service is working correctly.</textarea>
+                </div>
+                
+                <button class="btn btn-primary" onclick="testEmail()">Send Test Email</button>
+                <button class="btn btn-warning" onclick="quickTestEmail()">Quick Test</button>
+                
+                <div id="emailResult" class="result-box"></div>
             </div>
-            
-            <div class="form-group">
-                <label for="welcomePhone">Phone Number:</label>
-                <input type="tel" id="welcomePhone" class="form-control" value="+1234567890">
-            </div>
-            
-            <div class="form-group">
-                <label for="welcomeUrl">Website URL:</label>
-                <input type="url" id="welcomeUrl" class="form-control" value="https://example.com">
-            </div>
-            
-            <div class="form-group">
-                <label for="welcomeDuration">Duration (minutes):</label>
-                <input type="number" id="welcomeDuration" class="form-control" value="30" min="1">
-            </div>
-            
-            <button class="btn btn-primary" onclick="testWelcome()">Send Welcome Notifications</button>
-            
-            <div id="welcomeResult" class="result-box"></div>
-        </div>
 
-        <div class="test-section">
-            <h2>📊 Test Summary Notifications</h2>
-            <p>Send a summary email and SMS when monitoring ends</p>
-            
-            <div class="form-group">
-                <label for="summaryEmail">Email Address:</label>
-                <input type="email" id="summaryEmail" class="form-control" value="test@example.com">
+            <!-- SMS Testing Section -->
+            <div class="test-card">
+                <h3>📱 Test SMS Service</h3>
+                <p>Test SMS notifications without monitoring</p>
+                
+                <div class="form-group">
+                    <label for="testPhone">Phone Number:</label>
+                    <input type="tel" id="testPhone" class="form-control" value="+1234567890" placeholder="Enter phone number to test">
+                </div>
+                
+                <div class="form-group">
+                    <label for="testSMSMessage">Message (optional):</label>
+                    <textarea id="testSMSMessage" class="form-control" rows="3" placeholder="Custom SMS message">This is a test SMS from your Web-Alert system to verify the SMS service is working correctly.</textarea>
+                </div>
+                
+                <button class="btn btn-success" onclick="testSMS()">Send Test SMS</button>
+                <button class="btn btn-warning" onclick="quickTestSMS()">Quick Test</button>
+                
+                <div id="smsResult" class="result-box"></div>
             </div>
-            
-            <div class="form-group">
-                <label for="summaryPhone">Phone Number:</label>
-                <input type="tel" id="summaryPhone" class="form-control" value="+1234567890">
-            </div>
-            
-            <div class="form-group">
-                <label for="summaryUrl">Website URL:</label>
-                <input type="url" id="summaryUrl" class="form-control" value="https://example.com">
-            </div>
-            
-            <div class="form-group">
-                <label for="summaryDuration">Duration (minutes):</label>
-                <input type="number" id="summaryDuration" class="form-control" value="30" min="1">
-            </div>
-            
-            <div class="form-group">
-                <label for="summaryChecks">Total Checks:</label>
-                <input type="number" id="summaryChecks" class="form-control" value="6" min="1">
-            </div>
-            
-            <div class="form-group">
-                <label for="summaryChanges">Changes Detected:</label>
-                <input type="number" id="summaryChanges" class="form-control" value="0" min="0">
-            </div>
-            
-            <button class="btn btn-success" onclick="testSummary()">Send Summary Notifications</button>
-            
-            <div id="summaryResult" class="result-box"></div>
         </div>
 
         <div class="test-section">
             <h2>🔗 Quick Test Links</h2>
-            <p>Test with default values:</p>
+            <p>Test both services with default values:</p>
             
-            <button class="btn btn-warning" onclick="quickTestWelcome()">Quick Welcome Test</button>
-            <button class="btn btn-warning" onclick="quickTestSummary()">Quick Summary Test</button>
+            <button class="btn btn-info" onclick="testBothServices()">Test Both Services</button>
+            <button class="btn btn-warning" onclick="resetAllForms()">Reset All Forms</button>
         </div>
     </div>
 
     <script>
-        async function testWelcome() {
-            const email = document.getElementById('welcomeEmail').value;
-            const phone = document.getElementById('welcomePhone').value;
-            const url = document.getElementById('welcomeUrl').value;
-            const duration = document.getElementById('welcomeDuration').value;
+        async function testEmail() {
+            const email = document.getElementById('testEmail').value;
+            const subject = document.getElementById('testEmailSubject').value;
+            const message = document.getElementById('testEmailMessage').value;
             
-            const resultBox = document.getElementById('welcomeResult');
+            if (!email) {
+                showResult('emailResult', 'error', 'Please enter an email address');
+                return;
+            }
+            
+            const resultBox = document.getElementById('emailResult');
             resultBox.style.display = 'block';
             resultBox.className = 'result-box result-success';
-            resultBox.innerHTML = '<p>⏳ Sending welcome notifications...</p>';
+            resultBox.innerHTML = '<p>⏳ Sending test email...</p>';
             
             try {
-                const response = await fetch(`/api/test-welcome?email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phone)}&url=${encodeURIComponent(url)}&duration=${duration}`);
+                const response = await fetch('/api/test-email', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: email,
+                        subject: subject,
+                        message: message
+                    })
+                });
+                
                 const data = await response.json();
                 
                 if (response.ok) {
                     resultBox.innerHTML = `
-                        <p>✅ Welcome notifications sent successfully!</p>
-                        <p><strong>Email ID:</strong> ${data.emailResult}</p>
-                        <p><strong>SMS ID:</strong> ${data.smsResult}</p>
-                        <p><strong>Message:</strong> ${data.message}</p>
+                        <p>✅ Test email sent successfully!</p>
+                        <p><strong>Email ID:</strong> ${data.emailId || 'N/A'}</p>
+                        <p><strong>Status:</strong> ${data.status || 'Sent'}</p>
+                        <p><strong>Message:</strong> ${data.message || 'Email delivered'}</p>
                     `;
                 } else {
-                    throw new Error(data.error || 'Failed to send welcome notifications');
+                    throw new Error(data.error || 'Failed to send test email');
                 }
             } catch (error) {
-                resultBox.className = 'result-box result-error';
-                resultBox.innerHTML = `
-                    <p>❌ Error sending welcome notifications:</p>
-                    <p>${error.message}</p>
-                `;
+                showResult('emailResult', 'error', `Error sending test email: ${error.message}`);
             }
         }
 
-        async function testSummary() {
-            const email = document.getElementById('summaryEmail').value;
-            const phone = document.getElementById('summaryPhone').value;
-            const url = document.getElementById('summaryUrl').value;
-            const duration = document.getElementById('summaryDuration').value;
-            const checks = document.getElementById('summaryChecks').value;
-            const changes = document.getElementById('summaryChanges').value;
+        async function testSMS() {
+            const phone = document.getElementById('testPhone').value;
+            const message = document.getElementById('testSMSMessage').value;
             
-            const resultBox = document.getElementById('summaryResult');
+            if (!phone) {
+                showResult('smsResult', 'error', 'Please enter a phone number');
+                return;
+            }
+            
+            const resultBox = document.getElementById('smsResult');
             resultBox.style.display = 'block';
             resultBox.className = 'result-box result-success';
-            resultBox.innerHTML = '<p>⏳ Sending summary notifications...</p>';
+            resultBox.innerHTML = '<p>⏳ Sending test SMS...</p>';
             
             try {
-                const response = await fetch(`/api/test-summary?email=${encodeURIComponent(email)}&phone=${encodeURIComponent(phone)}&url=${encodeURIComponent(url)}&duration=${duration}&checks=${checks}&changes=${changes}`);
+                const response = await fetch('/api/test-sms', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        phone: phone,
+                        message: message
+                    })
+                });
+                
                 const data = await response.json();
                 
                 if (response.ok) {
                     resultBox.innerHTML = `
-                        <p>✅ Summary notifications sent successfully!</p>
-                        <p><strong>Email ID:</strong> ${data.emailResult}</p>
-                        <p><strong>SMS ID:</strong> ${data.smsResult}</p>
-                        <p><strong>Message:</strong> ${data.message}</p>
+                        <p>✅ Test SMS sent successfully!</p>
+                        <p><strong>SMS ID:</strong> ${data.smsId || 'N/A'}</p>
+                        <p><strong>Status:</strong> ${data.status || 'Sent'}</p>
+                        <p><strong>Message:</strong> ${data.message || 'SMS delivered'}</p>
                     `;
                 } else {
-                    throw new Error(data.error || 'Failed to send summary notifications');
+                    throw new Error(data.error || 'Failed to send test SMS');
                 }
             } catch (error) {
-                resultBox.className = 'result-box result-error';
-                resultBox.innerHTML = `
-                    <p>❌ Error sending summary notifications:</p>
-                    <p>${error.message}</p>
-                `;
+                showResult('smsResult', 'error', `Error sending test SMS: ${error.message}`);
             }
         }
 
-        function quickTestWelcome() {
-            document.getElementById('welcomeEmail').value = 'test@example.com';
-            document.getElementById('welcomePhone').value = '+1234567890';
-            document.getElementById('welcomeUrl').value = 'https://example.com';
-            document.getElementById('welcomeDuration').value = '30';
-            testWelcome();
+        async function testBothServices() {
+            // Test email first
+            await testEmail();
+            
+            // Wait a moment, then test SMS
+            setTimeout(() => {
+                testSMS();
+            }, 1000);
         }
 
-        function quickTestSummary() {
-            document.getElementById('summaryEmail').value = 'test@example.com';
-            document.getElementById('summaryPhone').value = '+1234567890';
-            document.getElementById('summaryUrl').value = 'https://example.com';
-            document.getElementById('summaryDuration').value = '30';
-            document.getElementById('summaryChecks').value = '6';
-            document.getElementById('summaryChanges').value = '0';
-            testSummary();
+        function quickTestEmail() {
+            document.getElementById('testEmail').value = 'test@example.com';
+            document.getElementById('testEmailSubject').value = 'Quick Test Email from Web-Alert';
+            document.getElementById('testEmailMessage').value = 'This is a quick test email to verify your email service is working.';
+            testEmail();
+        }
+
+        function quickTestSMS() {
+            document.getElementById('testPhone').value = '+1234567890';
+            document.getElementById('testSMSMessage').value = 'Quick test SMS from Web-Alert - service verification.';
+            testSMS();
+        }
+
+        function resetAllForms() {
+            // Reset email form
+            document.getElementById('testEmail').value = 'test@example.com';
+            document.getElementById('testEmailSubject').value = 'Test Email from Web-Alert';
+            document.getElementById('testEmailMessage').value = 'This is a test email from your Web-Alert system to verify the email service is working correctly.';
+            
+            // Reset SMS form
+            document.getElementById('testPhone').value = '+1234567890';
+            document.getElementById('testSMSMessage').value = 'This is a test SMS from your Web-Alert system to verify the SMS service is working correctly.';
+            
+            // Hide all result boxes
+            document.getElementById('emailResult').style.display = 'none';
+            document.getElementById('smsResult').style.display = 'none';
+        }
+
+        function showResult(elementId, type, message) {
+            const resultBox = document.getElementById(elementId);
+            resultBox.style.display = 'block';
+            resultBox.className = `result-box result-${type}`;
+            resultBox.innerHTML = `<p>${type === 'error' ? '❌' : '✅'} ${message}</p>`;
         }
     </script>
 </body>
