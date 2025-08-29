@@ -193,8 +193,8 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                         RETURNING id
                     `, [urlId, previousContent, content]);
 
-                // Notify all subscribers
-                if (subscribers.rows && subscribers.rows.length > 0) {
+                    // Notify all subscribers
+                    if (subscribers.rows && subscribers.rows.length > 0) {
                     for (const subscriber of subscribers.rows) {
                         try {
                             // Send notifications
