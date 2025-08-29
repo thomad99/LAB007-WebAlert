@@ -88,5 +88,6 @@ if %errorlevel% equ 0 (
 
 :end
 echo %CYAN%Script completed.%RESET%
-echo %WHITE%Press any key to continue . . .%RESET%
-pause >nul
+echo %WHITE%Sync finished - window will close automatically in 5 seconds...%RESET%
+timeout /t 5 /nobreak >nul
+exit

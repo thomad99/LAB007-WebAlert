@@ -1,9 +1,9 @@
 services:
   - type: web
     name: web-alert
-    env: docker
-    dockerCommand: node backend/server.js
+    env: node
     buildCommand: npm install
+    startCommand: node backend/server.js
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV

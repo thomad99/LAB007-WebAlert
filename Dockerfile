@@ -2,7 +2,7 @@ FROM node:20-slim
 
 # Install Chrome and dependencies
 RUN apt-get update \
-    && apt-get install -y wget gnupg2 \
+    && apt-get install -y wget gnupg2 curl \
     && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /usr/share/keyrings/googlechrome-linux-keyring.gpg \
     && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/googlechrome-linux-keyring.gpg] http://dl.google.com/linux/chrome/deb/ stable main" | tee /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update \
@@ -23,8 +23,9 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Install dependencies with specific flags for Render
+RUN npm ci --only=production --no-audit --no-fund \
+    && npm cache clean --force
 
 # Copy source
 COPY . .
@@ -39,7 +40,8 @@ USER node
 # Set environment variables
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
     PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome \
-    NODE_ENV=production
+    NODE_ENV=production \
+    PUPPETEER_CACHE_DIR=/app/.cache/puppeteer
 
 # Expose port
 EXPOSE 3000
