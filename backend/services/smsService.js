@@ -136,16 +136,16 @@ async function sendSummarySMS(phone, websiteUrl, checkCount, changesDetected) {
 // Add a test function
 async function testConnection() {
     try {
-        console.log('Testing Twilio connection...');
-        const account = await client.api.accounts(process.env.TWILIO_ACCOUNT_SID).fetch();
+        console.log('Testing Mock SMS connection...');
+        // Simulate a successful connection test
         return {
             status: 'connected',
-            accountStatus: account.status,
-            accountType: account.type,
-            friendlyName: account.friendlyName
+            accountStatus: 'active',
+            accountType: 'mock',
+            friendlyName: 'Mock SMS Service'
         };
     } catch (error) {
-        console.error('Twilio connection test failed:', error);
+        console.error('Mock SMS connection test failed:', error);
         return {
             status: 'error',
             error: error.message,
