@@ -170,8 +170,8 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                 );
 
                 if (content !== previousContent) {
-                console.log(`Change detected for URL ID ${urlId}`);
-                changesDetected++;
+                    console.log(`Change detected for URL ID ${urlId}`);
+                    changesDetected++;
 
                 // Get all active subscribers for this URL
                 const subscribers = await db.query(`
