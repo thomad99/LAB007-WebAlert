@@ -1011,6 +1011,34 @@ app.get('/api/test-summary', async (req, res) => {
     }
 });
 
+// Add a test endpoint for Email-to-SMS gateway
+app.post('/api/test-sms-gateway', async (req, res) => {
+    try {
+        const { phone, carrier, message, preferMms } = req.body || {};
+        if (!phone || !carrier) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing required fields',
+                required: ['phone', 'carrier'],
+                received: { phone, carrier }
+            });
+        }
+
+        const text = message || 'This is a test message from Web-Alert via email-to-SMS gateway.';
+        const result = await smsService.sendViaEmailGateway(
+            phone,
+            carrier,
+            text,
+            'Web Alert Test',
+            preferMms !== false // default true
+        );
+
+        res.json({ success: true, result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Add this endpoint to check active monitoring
 app.get('/api/active-monitors', async (req, res) => {
     try {

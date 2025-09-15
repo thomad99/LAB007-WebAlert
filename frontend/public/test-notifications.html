@@ -178,12 +178,39 @@
                 </div>
                 
                 <div class="form-group">
+                    <label for="testCarrier">Carrier (email-to-SMS):</label>
+                    <select id="testCarrier" class="form-control">
+                        <option value="firstnet">FirstNet (AT&T)</option>
+                        <option value="att">AT&amp;T</option>
+                        <option value="verizon">Verizon</option>
+                        <option value="comcast">Comcast/Xfinity Mobile</option>
+                        <option value="mint">Mint Mobile</option>
+                        <option value="tmobile">T-Mobile</option>
+                        <option value="google fi">Google Fi</option>
+                        <option value="cricket">Cricket</option>
+                        <option value="us cellular">US Cellular</option>
+                        <option value="metro">Metro by T-Mobile</option>
+                        <option value="boost">Boost Mobile</option>
+                        <option value="visible">Visible</option>
+                        <option value="straight talk">Straight Talk</option>
+                        <option value="tracfone">Tracfone</option>
+                        <option value="ting">Ting</option>
+                        <option value="consumer cellular">Consumer Cellular</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label><input type="checkbox" id="preferMms" checked> Prefer MMS gateway (more reliable)</label>
+                </div>
+                
+                <div class="form-group">
                     <label for="testSMSMessage">Message (optional):</label>
                     <textarea id="testSMSMessage" class="form-control" rows="3" placeholder="Custom SMS message">This is a test SMS from your Web-Alert system to verify the SMS service is working correctly.</textarea>
                 </div>
                 
                 <button class="btn btn-success" onclick="testSMS()">Send Test SMS</button>
                 <button class="btn btn-warning" onclick="quickTestSMS()">Quick Test</button>
+                <button class="btn btn-primary" onclick="testSMSGateway()">Send via Email-to-SMS Gateway</button>
                 
                 <div id="smsResult" class="result-box"></div>
             </div>
@@ -284,6 +311,60 @@
                 }
             } catch (error) {
                 showResult('smsResult', 'error', `Error sending test SMS: ${error.message}`);
+            }
+        }
+
+        async function testSMSGateway() {
+            const phone = document.getElementById('testPhone').value;
+            const carrier = document.getElementById('testCarrier').value;
+            const message = document.getElementById('testSMSMessage').value;
+            const preferMms = document.getElementById('preferMms').checked;
+
+            if (!phone) {
+                showResult('smsResult', 'error', 'Please enter a phone number');
+                return;
+            }
+            if (!carrier) {
+                showResult('smsResult', 'error', 'Please select a carrier');
+                return;
+            }
+
+            const resultBox = document.getElementById('smsResult');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box result-success';
+            resultBox.innerHTML = '<p>⏳ Sending test SMS via gateway...</p>';
+
+            try {
+                const response = await fetch('/api/test-sms-gateway', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        phone: phone,
+                        carrier: carrier,
+                        message: message,
+                        preferMms: preferMms
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    const r = data.result || {};
+                    resultBox.innerHTML = `
+                        <p>✅ Test SMS (gateway) sent!</p>
+                        <p><strong>To:</strong> ${r.to || 'N/A'}</p>
+                        <p><strong>Carrier:</strong> ${r.carrier || carrier}</p>
+                        <p><strong>Message ID:</strong> ${r.messageId || 'N/A'}</p>
+                        <p><strong>Accepted:</strong> ${(r.accepted && r.accepted.length ? r.accepted.join(', ') : 'N/A')}</p>
+                        <p><strong>Rejected:</strong> ${(r.rejected && r.rejected.length ? r.rejected.join(', ') : 'None')}</p>
+                    `;
+                } else {
+                    throw new Error(data.error || 'Failed to send via gateway');
+                }
+            } catch (error) {
+                showResult('smsResult', 'error', `Error sending SMS via gateway: ${error.message}`);
             }
         }
 

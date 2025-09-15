@@ -2,6 +2,131 @@
 console.log('Initializing Mock SMS service...');
 console.log('SMS messages will be logged to console instead of sent');
 
+// Email transport for email-to-SMS gateways
+const nodemailer = require('nodemailer');
+const emailTransporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD
+    }
+});
+
+// Carrier gateway map (prefer MMS where available for better deliverability)
+// Note: Some MVNOs use their host network's gateways. We map common aliases.
+const CARRIER_GATEWAYS = {
+    // AT&T and FirstNet (FirstNet rides on AT&T)
+    'att': { sms: 'txt.att.net', mms: 'mms.att.net' },
+    'at&t': { sms: 'txt.att.net', mms: 'mms.att.net' },
+    'firstnet': { sms: 'txt.att.net', mms: 'mms.att.net' },
+
+    // Verizon and Xfinity Mobile (Xfinity uses Verizon network)
+    'verizon': { sms: 'vtext.com', mms: 'vzwpix.com' },
+    'xfinity': { sms: 'vtext.com', mms: 'vzwpix.com' },
+    'xfinity mobile': { sms: 'vtext.com', mms: 'vzwpix.com' },
+    'comcast': { sms: 'vtext.com', mms: 'vzwpix.com' },
+
+    // T-Mobile and MVNOs (Mint Mobile, Google Fi often route via tmomail)
+    'tmobile': { sms: 'tmomail.net', mms: 'tmomail.net' },
+    't-mobile': { sms: 'tmomail.net', mms: 'tmomail.net' },
+    'mint': { sms: 'tmomail.net', mms: 'tmomail.net' },
+    'mint mobile': { sms: 'tmomail.net', mms: 'tmomail.net' },
+
+    // Google Fi direct
+    'google fi': { sms: 'msg.fi.google.com', mms: 'msg.fi.google.com' },
+
+    // Cricket (AT&T)
+    'cricket': { sms: 'sms.cricketwireless.net', mms: 'mms.cricketwireless.net' },
+
+    // US Cellular
+    'us cellular': { sms: 'email.uscc.net', mms: 'mms.uscc.net' },
+    'uscellular': { sms: 'email.uscc.net', mms: 'mms.uscc.net' },
+
+    // Metro by T-Mobile
+    'metro': { sms: 'metropcs.sms.us', mms: 'mymetropcs.com' },
+    'metropcs': { sms: 'metropcs.sms.us', mms: 'mymetropcs.com' },
+    'metro by t-mobile': { sms: 'metropcs.sms.us', mms: 'mymetropcs.com' },
+
+    // Boost (varies by network; historically Sprint/T-Mobile)
+    'boost': { sms: 'sms.myboostmobile.com', mms: 'myboostmobile.com' },
+    'boost mobile': { sms: 'sms.myboostmobile.com', mms: 'myboostmobile.com' },
+
+    // Ting (multiple backends; try both)
+    'ting': { sms: 'message.ting.com', mms: 'message.ting.com' },
+
+    // Consumer Cellular (AT&T/T-Mobile MVNO)
+    'consumer cellular': { sms: 'mailmymobile.net', mms: 'mailmymobile.net' },
+
+    // Straight Talk (multiple networks)
+    'straight talk': { sms: 'vtext.com', mms: 'mypixmessages.com' },
+
+    // Tracfone (multiple networks)
+    'tracfone': { sms: 'mmst5.tracfone.com', mms: 'mmst5.tracfone.com' },
+
+    // Visible (Verizon)
+    'visible': { sms: 'vtext.com', mms: 'vzwpix.com' },
+};
+
+function normalizeCarrierName(carrier) {
+    if (!carrier) return '';
+    return String(carrier).trim().toLowerCase();
+}
+
+function resolveGatewayAddress(phone, carrier, preferMms = true) {
+    const cleaned = String(phone).replace(/\D/g, '');
+    if (cleaned.length < 10) {
+        throw new Error('Invalid phone number for gateway');
+    }
+    const last10 = cleaned.slice(-10);
+    const key = normalizeCarrierName(carrier);
+    const entry = CARRIER_GATEWAYS[key];
+    if (!entry) {
+        throw new Error(`Unsupported or unknown carrier: ${carrier}`);
+    }
+    const domain = preferMms && entry.mms ? entry.mms : entry.sms;
+    if (!domain) {
+        throw new Error(`No gateway domain available for carrier: ${carrier}`);
+    }
+    return `${last10}@${domain}`;
+}
+
+async function sendViaEmailGateway(phone, carrier, message, subject, preferMms = true) {
+    try {
+        const toAddress = resolveGatewayAddress(phone, carrier, preferMms);
+        const mailOptions = {
+            from: `"Web Alert" <${process.env.EMAIL_USER}>`,
+            to: toAddress,
+            subject: subject || 'Web Alert',
+            text: message,
+        };
+
+        console.log('Sending Email-to-SMS via gateway:', { toAddress, carrier, preferMms });
+        const info = await emailTransporter.sendMail(mailOptions);
+        console.log('Gateway email sent:', {
+            messageId: info.messageId,
+            response: info.response,
+            accepted: info.accepted,
+            rejected: info.rejected
+        });
+        return {
+            method: 'email-gateway',
+            to: toAddress,
+            carrier: normalizeCarrierName(carrier),
+            messageId: info.messageId,
+            response: info.response,
+            accepted: info.accepted,
+            rejected: info.rejected
+        };
+    } catch (error) {
+        console.error('Error sending via email-to-SMS gateway:', {
+            error: error.message,
+            carrier,
+            phone
+        });
+        throw error;
+    }
+}
+
 // Mock client for compatibility
 const client = {
     messages: {
