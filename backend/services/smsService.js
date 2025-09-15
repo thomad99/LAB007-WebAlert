@@ -284,5 +284,7 @@ module.exports = {
     sendWelcomeSMS,
     sendSummarySMS,
     testConnection,
-    formatPhoneNumber // Export for testing
+    formatPhoneNumber, // Export for testing
+    sendViaEmailGateway,
+    resolveGatewayAddress
 }; 
