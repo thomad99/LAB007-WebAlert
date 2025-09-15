@@ -9,6 +9,24 @@ window.onerror = function(msg, url, lineNo, columnNo, error) {
     return false;
 };
 
+// Terms and Conditions Popup Functions
+function showTermsPopup() {
+    document.getElementById('termsPopup').style.display = 'block';
+    document.body.style.overflow = 'hidden'; // Prevent background scrolling
+}
+
+function hideTermsPopup() {
+    document.getElementById('termsPopup').style.display = 'none';
+    document.body.style.overflow = 'auto'; // Restore scrolling
+}
+
+// Close popup with Escape key
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        hideTermsPopup();
+    }
+});
+
 document.getElementById('alertForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 
