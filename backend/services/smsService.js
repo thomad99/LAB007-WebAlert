@@ -90,38 +90,79 @@ function resolveGatewayAddress(phone, carrier, preferMms = true) {
     return `${last10}@${domain}`;
 }
 
-async function sendViaEmailGateway(phone, carrier, message, subject, preferMms = true) {
+async function sendViaEmailGateway(phone, carrier, message, subject, preferMms = true, fallback = true, tryAll = false) {
     try {
-        const toAddress = resolveGatewayAddress(phone, carrier, preferMms);
-        const mailOptions = {
-            from: `"Web Alert" <${process.env.EMAIL_USER}>`,
-            to: toAddress,
-            subject: subject || 'Web Alert',
-            text: message,
-        };
+        const cleaned = String(phone).replace(/\D/g, '');
+        if (cleaned.length < 10) throw new Error('Invalid phone number for gateway');
 
-        console.log('Sending Email-to-SMS via gateway:', { toAddress, carrier, preferMms });
-        const info = await emailTransporter.sendMail(mailOptions);
-        console.log('Gateway email sent:', {
-            messageId: info.messageId,
-            response: info.response,
-            accepted: info.accepted,
-            rejected: info.rejected
-        });
-        return {
-            method: 'email-gateway',
-            to: toAddress,
-            carrier: normalizeCarrierName(carrier),
-            messageId: info.messageId,
-            response: info.response,
-            accepted: info.accepted,
-            rejected: info.rejected
-        };
+        const key = normalizeCarrierName(carrier);
+        const entry = CARRIER_GATEWAYS[key];
+        if (!entry) throw new Error(`Unsupported or unknown carrier: ${carrier}`);
+
+        const domains = [];
+        if (preferMms && entry.mms) domains.push(entry.mms);
+        if (entry.sms) domains.push(entry.sms);
+        if (!preferMms && entry.mms && !domains.includes(entry.mms)) domains.push(entry.mms);
+
+        const last10 = cleaned.slice(-10);
+        const attempts = [];
+        let lastError = null;
+
+        for (const domain of domains) {
+            const toAddress = `${last10}@${domain}`;
+            const mailOptions = {
+                from: `"Web Alert" <${process.env.EMAIL_USER}>`,
+                to: toAddress,
+                subject: subject || 'Web Alert',
+                text: message,
+            };
+
+            console.log('Sending Email-to-SMS via gateway:', { toAddress, carrier: key, domain });
+            try {
+                const info = await emailTransporter.sendMail(mailOptions);
+                attempts.push({ domain, to: toAddress, success: true, messageId: info.messageId });
+                if (!tryAll) {
+                    return {
+                        method: 'email-gateway',
+                        to: toAddress,
+                        carrier: key,
+                        domain,
+                        messageId: info.messageId,
+                        response: info.response,
+                        accepted: info.accepted,
+                        rejected: info.rejected,
+                        attempts
+                    };
+                }
+            } catch (err) {
+                console.error('Gateway send failed for domain', domain, err.message);
+                attempts.push({ domain, to: toAddress, success: false, error: err.message });
+                lastError = err;
+                if (!fallback) break;
+            }
+        }
+
+        // If trying all, return a summary with overall success = any success
+        if (tryAll) {
+            const anySuccess = attempts.some(a => a.success);
+            return {
+                method: 'email-gateway',
+                carrier: key,
+                triedAll: true,
+                success: anySuccess,
+                attempts
+            };
+        }
+
+        const error = lastError || new Error('All gateway attempts failed');
+        error.attempts = attempts;
+        throw error;
     } catch (error) {
         console.error('Error sending via email-to-SMS gateway:', {
             error: error.message,
             carrier,
-            phone
+            phone,
+            attempts: error.attempts
         });
         throw error;
     }

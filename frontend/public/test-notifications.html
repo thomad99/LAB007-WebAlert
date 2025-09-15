@@ -202,6 +202,9 @@
                 <div class="form-group">
                     <label><input type="checkbox" id="preferMms" checked> Prefer MMS gateway (more reliable)</label>
                 </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="tryAllGateways"> Try all gateways for this carrier</label>
+                </div>
                 
                 <div class="form-group">
                     <label for="testSMSMessage">Message (optional):</label>
@@ -319,6 +322,7 @@
             const carrier = document.getElementById('testCarrier').value;
             const message = document.getElementById('testSMSMessage').value;
             const preferMms = document.getElementById('preferMms').checked;
+            const tryAll = document.getElementById('tryAllGateways').checked;
 
             if (!phone) {
                 showResult('smsResult', 'error', 'Please enter a phone number');
@@ -344,7 +348,8 @@
                         phone: phone,
                         carrier: carrier,
                         message: message,
-                        preferMms: preferMms
+                        preferMms: preferMms,
+                        tryAll: tryAll
                     })
                 });
 
@@ -352,14 +357,25 @@
 
                 if (response.ok && data.success) {
                     const r = data.result || {};
-                    resultBox.innerHTML = `
-                        <p>✅ Test SMS (gateway) sent!</p>
-                        <p><strong>To:</strong> ${r.to || 'N/A'}</p>
-                        <p><strong>Carrier:</strong> ${r.carrier || carrier}</p>
-                        <p><strong>Message ID:</strong> ${r.messageId || 'N/A'}</p>
-                        <p><strong>Accepted:</strong> ${(r.accepted && r.accepted.length ? r.accepted.join(', ') : 'N/A')}</p>
-                        <p><strong>Rejected:</strong> ${(r.rejected && r.rejected.length ? r.rejected.join(', ') : 'None')}</p>
-                    `;
+                    if (r.triedAll || r.triedAll === true || r.success === false || Array.isArray(r.attempts)) {
+                        const attempts = (r.attempts || []).map(a => `<li>${a.domain} → ${a.to} : ${a.success ? '✅ ' + (a.messageId || '') : '❌ ' + (a.error || '')}</li>`).join('');
+                        resultBox.innerHTML = `
+                            <p>✅ Gateway test executed.</p>
+                            <p><strong>Carrier:</strong> ${r.carrier || carrier}</p>
+                            <p><strong>Any success:</strong> ${r.success ? 'Yes' : 'No'}</p>
+                            <ul>${attempts}</ul>
+                        `;
+                    } else {
+                        resultBox.innerHTML = `
+                            <p>✅ Test SMS (gateway) sent!</p>
+                            <p><strong>To:</strong> ${r.to || 'N/A'}</p>
+                            <p><strong>Carrier:</strong> ${r.carrier || carrier}</p>
+                            <p><strong>Domain:</strong> ${r.domain || 'N/A'}</p>
+                            <p><strong>Message ID:</strong> ${r.messageId || 'N/A'}</p>
+                            <p><strong>Accepted:</strong> ${(r.accepted && r.accepted.length ? r.accepted.join(', ') : 'N/A')}</p>
+                            <p><strong>Rejected:</strong> ${(r.rejected && r.rejected.length ? r.rejected.join(', ') : 'None')}</p>
+                        `;
+                    }
                 } else {
                     throw new Error(data.error || 'Failed to send via gateway');
                 }
