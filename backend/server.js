@@ -1014,7 +1014,7 @@ app.get('/api/test-summary', async (req, res) => {
 // Add a test endpoint for Email-to-SMS gateway
 app.post('/api/test-sms-gateway', async (req, res) => {
     try {
-        const { phone, carrier, message, preferMms, tryAll, fallback } = req.body || {};
+        const { phone, carrier, message, preferMms, tryAll, fallback, blankSubject, shortMessage } = req.body || {};
         if (!phone || !carrier) {
             return res.status(400).json({
                 success: false,
@@ -1032,7 +1032,8 @@ app.post('/api/test-sms-gateway', async (req, res) => {
             'Web Alert Test',
             preferMms !== false, // default true
             fallback !== false,  // default true
-            tryAll === true      // default false
+            tryAll === true,      // default false
+            { blankSubject: blankSubject === true, shortMessage: shortMessage === true }
         );
 
         res.json({ success: true, result });

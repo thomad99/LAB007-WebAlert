@@ -205,6 +205,12 @@
                 <div class="form-group">
                     <label><input type="checkbox" id="tryAllGateways"> Try all gateways for this carrier</label>
                 </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="blankSubject"> Blank subject (reduce filtering)</label>
+                </div>
+                <div class="form-group">
+                    <label><input type="checkbox" id="shortMessage"> Short message (<=120 chars)</label>
+                </div>
                 
                 <div class="form-group">
                     <label for="testSMSMessage">Message (optional):</label>
@@ -323,6 +329,8 @@
             const message = document.getElementById('testSMSMessage').value;
             const preferMms = document.getElementById('preferMms').checked;
             const tryAll = document.getElementById('tryAllGateways').checked;
+            const blankSubject = document.getElementById('blankSubject').checked;
+            const shortMessage = document.getElementById('shortMessage').checked;
 
             if (!phone) {
                 showResult('smsResult', 'error', 'Please enter a phone number');
@@ -349,7 +357,9 @@
                         carrier: carrier,
                         message: message,
                         preferMms: preferMms,
-                        tryAll: tryAll
+                        tryAll: tryAll,
+                        blankSubject: blankSubject,
+                        shortMessage: shortMessage
                     })
                 });
 

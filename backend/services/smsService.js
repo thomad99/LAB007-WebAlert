@@ -67,6 +67,19 @@ const CARRIER_GATEWAYS = {
     'visible': { sms: 'vtext.com', mms: 'vzwpix.com' },
 };
 
+// Alias groups to try host networks when tryAll is enabled
+const CARRIER_ALIASES = {
+    'firstnet': ['att'],
+    'mint': ['tmobile'],
+    'mint mobile': ['tmobile'],
+    'xfinity': ['verizon'],
+    'xfinity mobile': ['verizon'],
+    'comcast': ['verizon'],
+    'visible': ['verizon'],
+    'consumer cellular': ['att', 'tmobile'],
+    'straight talk': ['verizon', 'att', 'tmobile']
+};
+
 function normalizeCarrierName(carrier) {
     if (!carrier) return '';
     return String(carrier).trim().toLowerCase();
@@ -90,43 +103,56 @@ function resolveGatewayAddress(phone, carrier, preferMms = true) {
     return `${last10}@${domain}`;
 }
 
-async function sendViaEmailGateway(phone, carrier, message, subject, preferMms = true, fallback = true, tryAll = false) {
+async function sendViaEmailGateway(phone, carrier, message, subject, preferMms = true, fallback = true, tryAll = false, options = {}) {
     try {
         const cleaned = String(phone).replace(/\D/g, '');
         if (cleaned.length < 10) throw new Error('Invalid phone number for gateway');
 
         const key = normalizeCarrierName(carrier);
-        const entry = CARRIER_GATEWAYS[key];
-        if (!entry) throw new Error(`Unsupported or unknown carrier: ${carrier}`);
+        const entriesKeys = [key, ...(tryAll ? (CARRIER_ALIASES[key] || []) : [])];
+        const entries = entriesKeys
+            .map(k => ({ k, e: CARRIER_GATEWAYS[k] }))
+            .filter(x => !!x.e);
+        if (entries.length === 0) throw new Error(`Unsupported or unknown carrier: ${carrier}`);
 
+        // Build ordered domain list across primary and alias carriers
         const domains = [];
-        if (preferMms && entry.mms) domains.push(entry.mms);
-        if (entry.sms) domains.push(entry.sms);
-        if (!preferMms && entry.mms && !domains.includes(entry.mms)) domains.push(entry.mms);
+        for (const { k: carrierKey, e } of entries) {
+            if (preferMms && e.mms && !domains.includes(`${carrierKey}:${e.mms}`)) {
+                domains.push(`${carrierKey}:${e.mms}`);
+            }
+            if (e.sms && !domains.includes(`${carrierKey}:${e.sms}`)) {
+                domains.push(`${carrierKey}:${e.sms}`);
+            }
+            if (!preferMms && e.mms && !domains.includes(`${carrierKey}:${e.mms}`)) {
+                domains.push(`${carrierKey}:${e.mms}`);
+            }
+        }
 
         const last10 = cleaned.slice(-10);
         const attempts = [];
         let lastError = null;
 
-        for (const domain of domains) {
+        for (const keyAndDomain of domains) {
+            const [carrierKey, domain] = keyAndDomain.split(':');
             const toAddress = `${last10}@${domain}`;
             const mailOptions = {
                 from: `"Web Alert" <${process.env.EMAIL_USER}>`,
                 to: toAddress,
-                subject: subject || 'Web Alert',
-                text: message,
+                subject: options.blankSubject ? '' : (subject || 'Web Alert'),
+                text: options.shortMessage ? String(message || '').slice(0, 120) : message,
             };
 
-            console.log('Sending Email-to-SMS via gateway:', { toAddress, carrier: key, domain });
+            console.log('Sending Email-to-SMS via gateway:', { toAddress, carrier: carrierKey, domain });
             try {
                 const info = await emailTransporter.sendMail(mailOptions);
-                attempts.push({ domain, to: toAddress, success: true, messageId: info.messageId });
+                attempts.push({ carrier: carrierKey, domain, to: toAddress, success: true, messageId: info.messageId });
                 if (!tryAll) {
                     return {
                         method: 'email-gateway',
                         to: toAddress,
-                        carrier: key,
-                        domain,
+                        carrier: carrierKey,
+                        domain: domain,
                         messageId: info.messageId,
                         response: info.response,
                         accepted: info.accepted,
@@ -136,7 +162,7 @@ async function sendViaEmailGateway(phone, carrier, message, subject, preferMms =
                 }
             } catch (err) {
                 console.error('Gateway send failed for domain', domain, err.message);
-                attempts.push({ domain, to: toAddress, success: false, error: err.message });
+                attempts.push({ carrier: carrierKey, domain, to: toAddress, success: false, error: err.message });
                 lastError = err;
                 if (!fallback) break;
             }
