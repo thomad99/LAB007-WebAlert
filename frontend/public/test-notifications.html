@@ -220,6 +220,7 @@
                 <button class="btn btn-success" onclick="testSMS()">Send Test SMS</button>
                 <button class="btn btn-warning" onclick="quickTestSMS()">Quick Test</button>
                 <button class="btn btn-primary" onclick="testSMSGateway()">Send via Email-to-SMS Gateway</button>
+                <button class="btn btn-info" onclick="testAllCarriers()">Test All Carriers</button>
                 
                 <div id="smsResult" class="result-box"></div>
             </div>
@@ -430,6 +431,65 @@
             // Hide all result boxes
             document.getElementById('emailResult').style.display = 'none';
             document.getElementById('smsResult').style.display = 'none';
+        }
+
+        async function testAllCarriers() {
+            const phone = document.getElementById('testPhone').value;
+            const message = document.getElementById('testSMSMessage').value;
+            
+            if (!phone) {
+                showResult('smsResult', 'error', 'Please enter a phone number');
+                return;
+            }
+            
+            const resultBox = document.getElementById('smsResult');
+            resultBox.style.display = 'block';
+            resultBox.className = 'result-box result-success';
+            resultBox.innerHTML = '<p>⏳ Testing all carriers (this may take a minute)...</p>';
+            
+            try {
+                const response = await fetch('/api/test-all-carriers', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        phone: phone,
+                        message: message || 'Test'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    const successful = data.results.filter(r => r.success);
+                    const failed = data.results.filter(r => !r.success);
+                    
+                    let html = `
+                        <p>✅ All carriers tested!</p>
+                        <p><strong>Summary:</strong> ${successful.length}/${data.results.length} carriers accepted the message</p>
+                        <h4>Successful carriers:</h4>
+                        <ul>
+                    `;
+                    
+                    successful.forEach(r => {
+                        html += `<li><strong>${r.carrier}</strong>: ${r.result.attempts ? r.result.attempts.length : 0} attempts</li>`;
+                    });
+                    
+                    html += '</ul><h4>Failed carriers:</h4><ul>';
+                    
+                    failed.forEach(r => {
+                        html += `<li><strong>${r.carrier}</strong>: ${r.error}</li>`;
+                    });
+                    
+                    html += '</ul>';
+                    resultBox.innerHTML = html;
+                } else {
+                    throw new Error(data.error || 'Failed to test carriers');
+                }
+            } catch (error) {
+                showResult('smsResult', 'error', `Error testing carriers: ${error.message}`);
+            }
         }
 
         function showResult(elementId, type, message) {

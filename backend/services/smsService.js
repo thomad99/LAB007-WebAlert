@@ -9,7 +9,9 @@ const emailTransporter = nodemailer.createTransport({
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASSWORD
-    }
+    },
+    debug: true,
+    logger: true
 });
 
 // Carrier gateway map (prefer MMS where available for better deliverability)
@@ -19,6 +21,8 @@ const CARRIER_GATEWAYS = {
     'att': { sms: 'txt.att.net', mms: 'mms.att.net' },
     'at&t': { sms: 'txt.att.net', mms: 'mms.att.net' },
     'firstnet': { sms: 'txt.att.net', mms: 'mms.att.net' },
+    // Alternative AT&T domains
+    'att-alt': { sms: 'mobile.att.net', mms: 'mms.att.net' },
 
     // Verizon and Xfinity Mobile (Xfinity uses Verizon network)
     'verizon': { sms: 'vtext.com', mms: 'vzwpix.com' },
@@ -69,7 +73,7 @@ const CARRIER_GATEWAYS = {
 
 // Alias groups to try host networks when tryAll is enabled
 const CARRIER_ALIASES = {
-    'firstnet': ['att'],
+    'firstnet': ['att', 'att-alt'],
     'mint': ['tmobile'],
     'mint mobile': ['tmobile'],
     'xfinity': ['verizon'],
@@ -346,6 +350,32 @@ async function testConnection() {
     }
 }
 
+async function testAllCarriers(phone, message = 'Test') {
+    const results = [];
+    const carriers = Object.keys(CARRIER_GATEWAYS);
+    
+    for (const carrier of carriers) {
+        try {
+            console.log(`Testing carrier: ${carrier}`);
+            const result = await sendViaEmailGateway(
+                phone, 
+                carrier, 
+                message, 
+                '', // blank subject
+                true, // prefer MMS
+                true, // fallback
+                true, // try all
+                { blankSubject: true, shortMessage: true }
+            );
+            results.push({ carrier, success: true, result });
+        } catch (error) {
+            results.push({ carrier, success: false, error: error.message, attempts: error.attempts });
+        }
+    }
+    
+    return results;
+}
+
 module.exports = {
     sendAlert,
     sendWelcomeSMS,
@@ -353,5 +383,6 @@ module.exports = {
     testConnection,
     formatPhoneNumber, // Export for testing
     sendViaEmailGateway,
-    resolveGatewayAddress
+    resolveGatewayAddress,
+    testAllCarriers
 }; 

@@ -1042,6 +1042,38 @@ app.post('/api/test-sms-gateway', async (req, res) => {
     }
 });
 
+// Test all carriers endpoint
+app.post('/api/test-all-carriers', async (req, res) => {
+    try {
+        const { phone, message } = req.body || {};
+        if (!phone) {
+            return res.status(400).json({
+                success: false,
+                error: 'Missing phone number',
+                required: ['phone']
+            });
+        }
+
+        console.log(`Testing all carriers for phone: ${phone}`);
+        const results = await smsService.testAllCarriers(phone, message || 'Test');
+        
+        const successful = results.filter(r => r.success);
+        const failed = results.filter(r => !r.success);
+        
+        res.json({ 
+            success: true, 
+            summary: {
+                total: results.length,
+                successful: successful.length,
+                failed: failed.length
+            },
+            results 
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // Add this endpoint to check active monitoring
 app.get('/api/active-monitors', async (req, res) => {
     try {
