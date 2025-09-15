@@ -1,8 +1,10 @@
-// Mock SMS service - logs messages instead of sending them
-console.log('Initializing Mock SMS service...');
-console.log('SMS messages will be logged to console instead of sent');
+// Real Twilio SMS service
+console.log('Initializing Twilio SMS service...');
 
-// Email transport for email-to-SMS gateways
+const twilio = require('twilio');
+const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+
+// Email transport for email-to-SMS gateways (fallback)
 const nodemailer = require('nodemailer');
 const emailTransporter = nodemailer.createTransport({
     service: 'gmail',
@@ -198,29 +200,7 @@ async function sendViaEmailGateway(phone, carrier, message, subject, preferMms =
     }
 }
 
-// Mock client for compatibility
-const client = {
-    messages: {
-        create: async (messageData) => {
-            console.log('📱 MOCK SMS SENT:', messageData);
-            return {
-                sid: 'mock_' + Date.now(),
-                status: 'delivered',
-                to: messageData.to,
-                from: messageData.from
-            };
-        }
-    },
-    api: {
-        accounts: () => ({
-            fetch: async () => ({
-                status: 'active',
-                type: 'mock',
-                friendlyName: 'Mock SMS Service'
-            })
-        })
-    }
-};
+// Twilio client is already initialized above
 
 // Helper function to format phone numbers
 function formatPhoneNumber(phone) {
@@ -251,7 +231,7 @@ async function sendAlert(phone, websiteUrl) {
         // Format the phone number
         const formattedPhone = formatPhoneNumber(phone);
         
-        console.log('Attempting to send SMS...', {
+        console.log('Attempting to send SMS via Twilio...', {
             originalPhone: phone,
             formattedPhone: formattedPhone,
             from: process.env.TWILIO_PHONE_NUMBER,
@@ -264,7 +244,7 @@ async function sendAlert(phone, websiteUrl) {
             from: process.env.TWILIO_PHONE_NUMBER
         });
 
-        console.log('SMS sent successfully:', {
+        console.log('SMS sent successfully via Twilio:', {
             messageId: message.sid,
             status: message.status,
             to: message.to,
@@ -273,7 +253,7 @@ async function sendAlert(phone, websiteUrl) {
 
         return message;
     } catch (error) {
-        console.error('Error sending SMS:', {
+        console.error('Error sending SMS via Twilio:', {
             error: error.message,
             code: error.code,
             moreInfo: error.moreInfo,
@@ -289,7 +269,7 @@ async function sendWelcomeSMS(phone, websiteUrl, duration) {
     try {
         const formattedPhone = formatPhoneNumber(phone);
         
-        console.log('Sending welcome SMS to:', formattedPhone);
+        console.log('Sending welcome SMS via Twilio to:', formattedPhone);
         
         const message = await client.messages.create({
             body: `🎉 Welcome to Web Alert! We're now monitoring ${websiteUrl} for ${duration} minutes. Checks every 5 min.`,
@@ -297,10 +277,10 @@ async function sendWelcomeSMS(phone, websiteUrl, duration) {
             from: process.env.TWILIO_PHONE_NUMBER
         });
 
-        console.log('Welcome SMS sent successfully:', message.sid);
+        console.log('Welcome SMS sent successfully via Twilio:', message.sid);
         return message;
     } catch (error) {
-        console.error('Error sending welcome SMS:', error);
+        console.error('Error sending welcome SMS via Twilio:', error);
         throw error;
     }
 }
@@ -309,7 +289,7 @@ async function sendSummarySMS(phone, websiteUrl, checkCount, changesDetected) {
     try {
         const formattedPhone = formatPhoneNumber(phone);
         
-        console.log('Sending summary SMS to:', formattedPhone);
+        console.log('Sending summary SMS via Twilio to:', formattedPhone);
         
         const summaryText = changesDetected > 0 
             ? `We detected ${changesDetected} change(s)`
@@ -321,10 +301,10 @@ async function sendSummarySMS(phone, websiteUrl, checkCount, changesDetected) {
             from: process.env.TWILIO_PHONE_NUMBER
         });
 
-        console.log('Summary SMS sent successfully:', message.sid);
+        console.log('Summary SMS sent successfully via Twilio:', message.sid);
         return message;
     } catch (error) {
-        console.error('Error sending summary SMS:', error);
+        console.error('Error sending summary SMS via Twilio:', error);
         throw error;
     }
 }
@@ -332,16 +312,17 @@ async function sendSummarySMS(phone, websiteUrl, checkCount, changesDetected) {
 // Add a test function
 async function testConnection() {
     try {
-        console.log('Testing Mock SMS connection...');
-        // Simulate a successful connection test
+        console.log('Testing Twilio SMS connection...');
+        const account = await client.api.accounts(process.env.TWILIO_ACCOUNT_SID).fetch();
         return {
             status: 'connected',
-            accountStatus: 'active',
-            accountType: 'mock',
-            friendlyName: 'Mock SMS Service'
+            accountStatus: account.status,
+            accountType: account.type,
+            friendlyName: account.friendlyName,
+            phoneNumber: process.env.TWILIO_PHONE_NUMBER
         };
     } catch (error) {
-        console.error('Mock SMS connection test failed:', error);
+        console.error('Twilio SMS connection test failed:', error);
         return {
             status: 'error',
             error: error.message,

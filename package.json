@@ -14,7 +14,8 @@
     "puppeteer": "^24.9.0",
     "node-cron": "^3.0.3",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1"
+    "dotenv": "^16.3.1",
+    "twilio": "^4.19.0"
   },
   "devDependencies": {
     "nodemon": "^3.0.1"

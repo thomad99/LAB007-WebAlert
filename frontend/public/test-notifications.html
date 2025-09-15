@@ -173,6 +173,13 @@
                 <p>Test SMS notifications without monitoring</p>
                 
                 <div class="form-group">
+                    <label>SMS Service Status:</label>
+                    <div id="smsStatus" class="result-box" style="display: block; margin-bottom: 15px;">
+                        <p>⏳ Checking SMS service status...</p>
+                    </div>
+                </div>
+                
+                <div class="form-group">
                     <label for="testPhone">Phone Number:</label>
                     <input type="tel" id="testPhone" class="form-control" value="941 326 9015" placeholder="Enter phone number to test">
                 </div>
@@ -217,7 +224,7 @@
                     <textarea id="testSMSMessage" class="form-control" rows="3" placeholder="Custom SMS message">This is a test SMS from your Web-Alert system to verify the SMS service is working correctly.</textarea>
                 </div>
                 
-                <button class="btn btn-success" onclick="testSMS()">Send Test SMS</button>
+                <button class="btn btn-success" onclick="testSMS()">Send Test SMS (Twilio)</button>
                 <button class="btn btn-warning" onclick="quickTestSMS()">Quick Test</button>
                 <button class="btn btn-primary" onclick="testSMSGateway()">Send via Email-to-SMS Gateway</button>
                 <button class="btn btn-info" onclick="testAllCarriers()">Test All Carriers</button>
@@ -236,6 +243,37 @@
     </div>
 
     <script>
+        // Check SMS service status on page load
+        async function checkSMSStatus() {
+            try {
+                const response = await fetch('/api/check-sms');
+                const data = await response.json();
+                const statusBox = document.getElementById('smsStatus');
+                
+                if (data.status === 'success' && data.connection.status === 'connected') {
+                    statusBox.className = 'result-box result-success';
+                    statusBox.innerHTML = `
+                        <p>✅ SMS Service: ${data.connection.friendlyName || 'Twilio'}</p>
+                        <p><strong>Status:</strong> ${data.connection.accountStatus}</p>
+                        <p><strong>Phone:</strong> ${data.connection.phoneNumber || 'N/A'}</p>
+                    `;
+                } else {
+                    statusBox.className = 'result-box result-error';
+                    statusBox.innerHTML = `
+                        <p>❌ SMS Service: ${data.error || 'Connection failed'}</p>
+                        <p>Using email-to-SMS gateway fallback</p>
+                    `;
+                }
+            } catch (error) {
+                const statusBox = document.getElementById('smsStatus');
+                statusBox.className = 'result-box result-error';
+                statusBox.innerHTML = `<p>❌ SMS Service: Error checking status</p>`;
+            }
+        }
+
+        // Check status when page loads
+        document.addEventListener('DOMContentLoaded', checkSMSStatus);
+
         async function testEmail() {
             const email = document.getElementById('testEmail').value;
             const subject = document.getElementById('testEmailSubject').value;
@@ -311,7 +349,7 @@
                 
                 if (response.ok) {
                     resultBox.innerHTML = `
-                        <p>✅ Test SMS sent successfully!</p>
+                        <p>✅ Test SMS sent successfully via Twilio!</p>
                         <p><strong>SMS ID:</strong> ${data.smsId || 'N/A'}</p>
                         <p><strong>Status:</strong> ${data.status || 'Sent'}</p>
                         <p><strong>Message:</strong> ${data.message || 'SMS delivered'}</p>
