@@ -61,16 +61,32 @@
             color: #721c24;
         }
         .consent-text {
-            margin-bottom: 10px;
-            padding: 10px;
+            margin-bottom: 15px;
+            padding: 15px;
             background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
             border-radius: 4px;
         }
         .consent-text p {
-            margin: 0;
+            margin: 0 0 10px 0;
             font-size: 0.9em;
             line-height: 1.4;
-            color: #6c757d;
+            color: #495057;
+        }
+        .consent-text p:last-child {
+            margin-bottom: 0;
+        }
+        .compliance-notice {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 12px;
+            border-radius: 4px;
+            margin-bottom: 15px;
+            font-size: 0.85em;
+        }
+        .compliance-notice strong {
+            color: #533f03;
         }
         
         .logo-container {
@@ -111,14 +127,34 @@
                     <input type="email" class="form-control" id="email" required>
                 </div>
                 <div class="form-group">
-                    <div class="consent-text">
-                        <p class="text-muted">
-                            By providing your Cell Phone number you consent to receiving text alerts based on your chosen settings here. 
-                            Your number will be removed from our system at the interval chosen below or after 24 hours.
-                        </p>
+                    <div class="compliance-notice">
+                        <strong>📱 SMS Messaging Notice (A2P 10DLC Compliant)</strong><br>
+                        This service uses automated text messaging. Message and data rates may apply. 
+                        By providing your phone number, you consent to receive automated text messages 
+                        from LAB007 Web Alert System.
                     </div>
-                    <label for="phone">Cell Phone Number</label>
-                    <input type="tel" class="form-control" id="phone" required>
+                    
+                    <div class="consent-text">
+                        <p><strong>Consent & Opt-In:</strong> By entering your phone number below, you explicitly consent to receive automated text messages about website changes for the monitoring period you select. You understand that:</p>
+                        <p>• <strong>Message Frequency:</strong> You will receive alerts only when changes are detected on the monitored website</p>
+                        <p>• <strong>Message Content:</strong> Alerts will contain the website URL, change detection time, and brief change summary</p>
+                        <p>• <strong>Opt-Out:</strong> Reply STOP to any message to opt out immediately, or your number will be automatically removed after the monitoring period ends</p>
+                        <p>• <strong>Data Usage:</strong> Standard message and data rates may apply. Check with your carrier for details</p>
+                        <p>• <strong>Support:</strong> Reply HELP for assistance or contact us at the provided email address</p>
+                        <p>• <strong>Privacy:</strong> Your phone number will be stored securely and deleted after monitoring ends or upon opt-out</p>
+                    </div>
+                    
+                    <label for="phone">Cell Phone Number (US/Canada)</label>
+                    <input type="tel" class="form-control" id="phone" required 
+                           placeholder="+1 (555) 123-4567" pattern="^\+?1?[2-9]\d{2}[2-9]\d{2}\d{4}$">
+                    <small class="text-muted">Format: +1 followed by 10-digit US/Canadian number</small>
+                    
+                    <div style="margin-top: 10px;">
+                        <label style="display: flex; align-items: flex-start; font-size: 0.9em; line-height: 1.3;">
+                            <input type="checkbox" id="smsConsent" required style="margin-right: 8px; margin-top: 2px;">
+                            <span>I have read and agree to the SMS messaging terms above. I consent to receive automated text messages from LAB007 Web Alert System and understand that message and data rates may apply. I can opt out at any time by replying STOP.</span>
+                        </label>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label for="duration">Duration of Polling (minutes):</label>

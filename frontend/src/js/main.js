@@ -13,11 +13,19 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const statusBox = document.getElementById('statusContent');
+    // Validate SMS consent checkbox
+    const smsConsent = document.getElementById('smsConsent');
+    if (!smsConsent.checked) {
+        alert('Please check the SMS consent checkbox to continue.');
+        return;
+    }
+
     const formData = {
         websiteUrl: document.getElementById('websiteUrl').value,
         email: document.getElementById('email').value,
         phone: document.getElementById('phone').value.replace(/\D/g, ''),
-        duration: parseInt(document.getElementById('duration').value)
+        duration: parseInt(document.getElementById('duration').value),
+        smsConsent: true
     };
 
     // Show the data being sent
