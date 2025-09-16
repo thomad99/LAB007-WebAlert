@@ -272,7 +272,7 @@ async function sendWelcomeSMS(phone, websiteUrl, duration) {
         console.log('Sending welcome SMS via Twilio to:', formattedPhone);
         
         const message = await client.messages.create({
-            body: `🎉 Welcome to Web Alert! We're now monitoring ${websiteUrl} for ${duration} minutes. Checks every 5 min.`,
+            body: `🎉 Welcome to Web Alert! We're now monitoring ${websiteUrl} for ${duration} minutes. Checks every 3 min.`,
             to: formattedPhone,
             from: process.env.TWILIO_PHONE_NUMBER
         });

@@ -176,7 +176,7 @@
                 </div>
                 <div class="form-group">
                     <label for="email">Email Address</label>
-                    <input type="email" class="form-control" id="email" required>
+                    <input type="email" class="form-control" id="email">
                 </div>
                 <div class="form-group">
                     <label for="phone">Cell Phone Number (US/Canada)</label>
@@ -192,9 +192,10 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="duration">Duration of Polling (minutes):</label>
+                    <label for="duration">Poll Period (minutes):</label>
                     <input type="number" id="duration" name="duration" min="1" value="10" required
-                           placeholder="Enter duration in minutes">
+                           placeholder="Total monitoring time in minutes">
+                    <small class="text-muted">How long to monitor the website (checks every 3 minutes)</small>
                 </div>
                 <button type="submit">Start Monitoring</button>
             </form>

@@ -102,7 +102,7 @@ async function sendAlert(email, websiteUrl, contentBefore, contentAfter) {
                         
                         <div class="footer">
                             <p>This alert was sent by LAB007 Web Alert System</p>
-                            <p>Monitoring frequency: Every 5 minutes</p>
+                            <p>Monitoring frequency: Every 3 minutes</p>
                         </div>
                     </div>
                 </body>
@@ -143,7 +143,7 @@ async function sendWelcomeEmail(email, websiteUrl, duration) {
                 <p>We've successfully started monitoring: <a href="${websiteUrl}">${websiteUrl}</a></p>
                 <p><strong>Monitoring Duration:</strong> ${duration} minutes</p>
                 <p><strong>Start Time:</strong> ${new Date().toLocaleString()}</p>
-                <p><strong>Check Frequency:</strong> Every 5 minutes</p>
+                <p><strong>Check Frequency:</strong> Every 3 minutes</p>
                 <hr>
                 <p>You'll receive notifications if any changes are detected on the website.</p>
                 <p>Monitoring will automatically stop after ${duration} minutes.</p>
