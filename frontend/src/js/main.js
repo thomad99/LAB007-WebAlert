@@ -31,9 +31,11 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
     e.preventDefault();
 
     const statusBox = document.getElementById('statusContent');
-    // Validate SMS consent checkbox
+    const phone = document.getElementById('phone').value.replace(/\D/g, '');
     const smsConsent = document.getElementById('smsConsent');
-    if (!smsConsent.checked) {
+    
+    // Only require SMS consent if phone number is provided
+    if (phone && !smsConsent.checked) {
         alert('Please check the SMS consent checkbox to continue.');
         return;
     }
@@ -41,9 +43,9 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
     const formData = {
         websiteUrl: document.getElementById('websiteUrl').value,
         email: document.getElementById('email').value,
-        phone: document.getElementById('phone').value.replace(/\D/g, ''),
+        phone: phone || null,
         duration: parseInt(document.getElementById('duration').value),
-        smsConsent: true
+        smsConsent: smsConsent.checked
     };
 
     // Show the data being sent
@@ -51,7 +53,7 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
         <p>⏳ Sending request with:</p>
         <p>🔗 URL: ${formData.websiteUrl}</p>
         <p>📧 Email: ${formData.email}</p>
-        <p>📱 Phone: ${formData.phone}</p>
+        <p>📱 Phone: ${formData.phone || 'Not provided (email only)'}</p>
         <p>⏱️ Duration: ${formData.duration} minutes</p>
     `;
     document.getElementById('statusBox').classList.add('status-active');
@@ -76,11 +78,11 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
         if (response.ok) {
             statusBox.innerHTML = `
                 <p>✅ Success! Monitoring started</p>
-                <p>🆔 Alert ID: ${data.alert.id}</p>
+                <p>🆔 Alert ID: ${data.data.subscriber.id}</p>
                 <p>🔗 URL: ${formData.websiteUrl}</p>
                 <p>⏱️ Duration: ${formData.duration} minutes</p>
                 <p>📧 Email: ${formData.email}</p>
-                <p>📱 Phone: ${formatPhoneNumber(formData.phone)}</p>
+                <p>📱 Phone: ${formData.phone ? formatPhoneNumber(formData.phone) : 'Not provided (email only)'}</p>
                 <p>🔄 First check will begin in about 1 minute</p>
                 <p><a href="/status.html" class="status-link">View All Monitoring Tasks</a></p>
             `;
@@ -98,6 +100,16 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
         document.getElementById('statusBox').classList.remove('status-active');
     }
 });
+
+// Format phone number for display
+function formatPhoneNumber(phone) {
+    if (!phone) return 'Not provided';
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length === 10) {
+        return `(${cleaned.slice(0,3)}) ${cleaned.slice(3,6)}-${cleaned.slice(6)}`;
+    }
+    return phone;
+}
 
 // Format phone number as user types
 document.getElementById('phone').addEventListener('input', function(e) {

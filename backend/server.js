@@ -121,14 +121,7 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                         
                         const checkCount = finalCheckCount.rows[0]?.check_count || 0;
                         
-                        const summaryNotifications = [
-                            smsService.sendSummarySMS(
-                                subscriberInfo.phone_number, 
-                                websiteUrl, 
-                                checkCount, 
-                                changesDetected
-                            )
-                        ];
+                        const summaryNotifications = [];
                         
                         if (subscriberInfo.email) {
                             summaryNotifications.push(
@@ -139,6 +132,17 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                                     checkCount, 
                                     changesDetected,
                                     new Date()
+                                )
+                            );
+                        }
+                        
+                        if (subscriberInfo.phone_number) {
+                            summaryNotifications.push(
+                                smsService.sendSummarySMS(
+                                    subscriberInfo.phone_number, 
+                                    websiteUrl, 
+                                    checkCount, 
+                                    changesDetected
                                 )
                             );
                         }
@@ -205,14 +209,7 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                         for (const subscriber of subscribers.rows) {
                             try {
                                 // Send notifications
-                                const notifications = [
-                                    smsService.sendAlert(subscriber.phone_number, websiteUrl)
-                                        .then(() => db.query(
-                                            'UPDATE alerts_history SET sms_sent = true WHERE id = $1',
-                                            [changeRecord.rows[0].id]
-                                        ))
-                                        .catch(error => console.error(`SMS notification failed for subscriber ${subscriber.subscriber_id}:`, error))
-                                ];
+                                const notifications = [];
                                 
                                 if (subscriber.email) {
                                     notifications.push(
@@ -225,7 +222,20 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                                     );
                                 }
                                 
-                                await Promise.all(notifications);
+                                if (subscriber.phone_number) {
+                                    notifications.push(
+                                        smsService.sendAlert(subscriber.phone_number, websiteUrl)
+                                            .then(() => db.query(
+                                                'UPDATE alerts_history SET sms_sent = true WHERE id = $1',
+                                                [changeRecord.rows[0].id]
+                                            ))
+                                            .catch(error => console.error(`SMS notification failed for subscriber ${subscriber.subscriber_id}:`, error))
+                                    );
+                                }
+                                
+                                if (notifications.length > 0) {
+                                    await Promise.all(notifications);
+                                }
                             } catch (error) {
                                 console.error(`Error notifying subscriber ${subscriber.subscriber_id}:`, error);
                             }
@@ -277,7 +287,7 @@ db.connect(async (err) => {
                     id SERIAL PRIMARY KEY,
                     url_id INTEGER REFERENCES monitored_urls(id),
                     email VARCHAR(255) NOT NULL,
-                    phone_number VARCHAR(20) NOT NULL,
+                    phone_number VARCHAR(20),
                     polling_duration INTEGER NOT NULL,
                     is_active BOOLEAN DEFAULT true,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -386,12 +396,12 @@ app.post('/api/monitor', async (req, res) => {
             websiteUrl = websiteUrl.replace(/moving\.html/i, 'MOVING.html');
         }
 
-        // Validate required fields (email is optional)
-        if (!websiteUrl || !phone || !duration) {
+        // Validate required fields (phone is now optional, email is required)
+        if (!websiteUrl || !email || !duration) {
             console.log('Missing required fields:', { websiteUrl, email, phone, duration });
             return res.status(400).json({
                 error: 'Missing required fields',
-                required: ['websiteUrl', 'phone', 'duration'],
+                required: ['websiteUrl', 'email', 'duration'],
                 received: { websiteUrl, email, phone, duration }
             });
         }
@@ -447,12 +457,17 @@ app.post('/api/monitor', async (req, res) => {
             
             // Send welcome notifications
             try {
-                const notifications = [smsService.sendWelcomeSMS(phone, websiteUrl, duration)];
+                const notifications = [];
                 if (email) {
                     notifications.push(emailService.sendWelcomeEmail(email, websiteUrl, duration));
                 }
-                await Promise.all(notifications);
-                console.log('Welcome notifications sent successfully');
+                if (phone) {
+                    notifications.push(smsService.sendWelcomeSMS(phone, websiteUrl, duration));
+                }
+                if (notifications.length > 0) {
+                    await Promise.all(notifications);
+                    console.log('Welcome notifications sent successfully');
+                }
             } catch (error) {
                 console.error('Error sending welcome notifications:', error);
                 // Continue with monitoring even if welcome notifications fail
