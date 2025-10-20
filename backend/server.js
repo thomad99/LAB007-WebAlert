@@ -311,6 +311,22 @@ db.connect(async (err) => {
 
             console.log('Database schema initialized successfully');
 
+            // Alter existing alert_subscribers table to make phone_number nullable
+            try {
+                console.log('Updating alert_subscribers table to make phone_number nullable...');
+                await db.query(`
+                    ALTER TABLE alert_subscribers 
+                    ALTER COLUMN phone_number DROP NOT NULL
+                `);
+                console.log('Successfully updated phone_number column to be nullable');
+            } catch (error) {
+                if (error.code === '42701') {
+                    console.log('Column phone_number already nullable or table does not exist yet');
+                } else {
+                    console.error('Error updating phone_number column:', error.message);
+                }
+            }
+
             // Verify tables were created
             const tables = ['monitored_urls', 'alert_subscribers', 'alerts_history'];
             for (const table of tables) {
