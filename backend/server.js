@@ -136,7 +136,7 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                             );
                         }
                         
-                        if (subscriberInfo.phone_number) {
+                        if (subscriberInfo.phone_number && subscriberInfo.phone_number.trim() !== '') {
                             summaryNotifications.push(
                                 smsService.sendSummarySMS(
                                     subscriberInfo.phone_number, 
@@ -222,7 +222,7 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                                     );
                                 }
                                 
-                                if (subscriber.phone_number) {
+                                if (subscriber.phone_number && subscriber.phone_number.trim() !== '') {
                                     notifications.push(
                                         smsService.sendAlert(subscriber.phone_number, websiteUrl)
                                             .then(() => db.query(
@@ -456,12 +456,41 @@ app.post('/api/monitor', async (req, res) => {
 
         // Create subscriber record
         console.log('Creating subscriber record...');
-        const subscriber = await db.query(`
-            INSERT INTO alert_subscribers 
-                (url_id, email, phone_number, polling_duration) 
-            VALUES ($1, $2, $3, $4) 
-            RETURNING *
-        `, [urlId, email, phone, duration]);
+        
+        // Handle phone number insertion - use conditional logic to avoid NULL constraint issues
+        let subscriber;
+        if (phone && phone.trim() !== '') {
+            subscriber = await db.query(`
+                INSERT INTO alert_subscribers 
+                    (url_id, email, phone_number, polling_duration) 
+                VALUES ($1, $2, $3, $4) 
+                RETURNING *
+            `, [urlId, email, phone, duration]);
+        } else {
+            // For databases that still have NOT NULL constraint, we'll need to handle this differently
+            // Try to insert without phone_number first
+            try {
+                subscriber = await db.query(`
+                    INSERT INTO alert_subscribers 
+                        (url_id, email, polling_duration) 
+                    VALUES ($1, $2, $3) 
+                    RETURNING *
+                `, [urlId, email, duration]);
+            } catch (error) {
+                if (error.code === '23502' && error.detail.includes('phone_number')) {
+                    // If the column still requires a value, insert with empty string
+                    console.log('Phone number column still requires a value, using empty string...');
+                    subscriber = await db.query(`
+                        INSERT INTO alert_subscribers 
+                            (url_id, email, phone_number, polling_duration) 
+                        VALUES ($1, $2, $3, $4) 
+                        RETURNING *
+                    `, [urlId, email, '', duration]);
+                } else {
+                    throw error;
+                }
+            }
+        }
 
         if (!subscriber.rows || subscriber.rows.length === 0) {
             throw new Error('Failed to create subscriber record');
@@ -477,7 +506,7 @@ app.post('/api/monitor', async (req, res) => {
                 if (email) {
                     notifications.push(emailService.sendWelcomeEmail(email, websiteUrl, duration));
                 }
-                if (phone) {
+                if (phone && phone.trim() !== '') {
                     notifications.push(smsService.sendWelcomeSMS(phone, websiteUrl, duration));
                 }
                 if (notifications.length > 0) {
