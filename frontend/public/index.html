@@ -36,12 +36,28 @@
             border-radius: 4px;
             cursor: pointer;
             font-weight: bold;
+            font-size: 16px;
         }
         .btn-primary {
             background-color: #007bff;
             color: white;
         }
         .btn-primary:hover {
+            background-color: #0056b3;
+        }
+        button[type="submit"] {
+            width: 100%;
+            padding: 12px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            margin-top: 10px;
+        }
+        button[type="submit"]:hover {
             background-color: #0056b3;
         }
         .alert {
@@ -195,7 +211,7 @@
                            placeholder="Total monitoring time in minutes">
                     <small class="text-muted">How long to monitor the website (checks every 3 minutes)</small>
                 </div>
-                <button type="submit">Start Monitoring</button>
+                <button type="submit" class="btn btn-primary">Start Monitoring</button>
             </form>
             <div id="statusBox" class="status-box">
                 <h2>Monitoring Status</h2>
