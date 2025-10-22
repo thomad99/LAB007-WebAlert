@@ -585,6 +585,7 @@ app.get('/api/status', async (req, res) => {
             ),
             latest_subscriber_info AS (
                 SELECT DISTINCT ON (url_id)
+                    id,
                     url_id,
                     email,
                     phone_number,
