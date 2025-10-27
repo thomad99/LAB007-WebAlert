@@ -41,7 +41,8 @@ app.use(cors());
 app.use(express.json());
 
 // Update the static file serving
-app.use(express.static(path.join(__dirname, '../frontend')));
+app.use(express.static(path.join(__dirname, '../frontend/public')));
+app.use('/src', express.static(path.join(__dirname, '../frontend/src')));
 
 // Store active monitoring tasks
 const monitoringTasks = new Map();
@@ -621,7 +622,7 @@ app.get('/api/status', async (req, res) => {
             LEFT JOIN latest_subscriber_info lsi ON mu.id = lsi.url_id
             LEFT JOIN change_counts cc ON cc.monitored_url_id = mu.id
             LEFT JOIN active_subscribers as_count ON as_count.url_id = mu.id
-            ORDER BY mu.created_at DESC
+            ORDER BY mu.last_check DESC NULLS LAST, mu.created_at DESC
         `);
 
         console.log(`Status query completed. Found ${result.rows.length} rows.`);
