@@ -112,47 +112,62 @@ async function startUrlMonitoring(urlId, websiteUrl) {
             if (!activeSubscribers.rows[0] || parseInt(activeSubscribers.rows[0].count) === 0) {
                 console.log(`No active subscribers left for URL ID ${urlId}, stopping monitoring`);
                 
-                // Send summary notifications before stopping
-                if (subscriberInfo) {
-                    try {
-                        const finalCheckCount = await db.query(
-                            'SELECT check_count FROM monitored_urls WHERE id = $1',
-                            [urlId]
-                        );
-                        
-                        const checkCount = finalCheckCount.rows[0]?.check_count || 0;
-                        
-                        const summaryNotifications = [];
-                        
-                        if (subscriberInfo.email) {
+                // Send summary notifications before stopping - get ALL subscribers
+                try {
+                    const finalCheckCount = await db.query(
+                        'SELECT check_count FROM monitored_urls WHERE id = $1',
+                        [urlId]
+                    );
+                    
+                    const checkCount = finalCheckCount.rows[0]?.check_count || 0;
+                    
+                    // Get all subscribers for this URL to send summary
+                    const allSubscribers = await db.query(`
+                        SELECT email, phone_number, polling_duration
+                        FROM alert_subscribers 
+                        WHERE url_id = $1
+                        ORDER BY created_at DESC
+                    `, [urlId]);
+                    
+                    const summaryNotifications = [];
+                    
+                    // Send summary to all subscribers
+                    for (const sub of allSubscribers.rows) {
+                        if (sub.email) {
+                            console.log(`Preparing to send summary email to: ${sub.email}`);
                             summaryNotifications.push(
                                 emailService.sendSummaryEmail(
-                                    subscriberInfo.email, 
+                                    sub.email, 
                                     websiteUrl, 
-                                    subscriberInfo.polling_duration, 
+                                    sub.polling_duration, 
                                     checkCount, 
                                     changesDetected,
                                     new Date()
-                                )
+                                ).then(() => console.log(`Summary email sent successfully to ${sub.email}`))
+                                .catch(error => console.error(`Error sending summary email to ${sub.email}:`, error))
                             );
                         }
                         
-                        if (subscriberInfo.phone_number && subscriberInfo.phone_number.trim() !== '') {
+                        if (sub.phone_number && sub.phone_number.trim() !== '') {
+                            console.log(`Preparing to send summary SMS to: ${sub.phone_number}`);
                             summaryNotifications.push(
                                 smsService.sendSummarySMS(
-                                    subscriberInfo.phone_number, 
+                                    sub.phone_number, 
                                     websiteUrl, 
                                     checkCount, 
                                     changesDetected
-                                )
+                                ).then(() => console.log(`Summary SMS sent successfully to ${sub.phone_number}`))
+                                .catch(error => console.error(`Error sending summary SMS to ${sub.phone_number}:`, error))
                             );
                         }
-                        
-                        await Promise.all(summaryNotifications);
-                        console.log(`Summary notifications sent for URL ID ${urlId}`);
-                    } catch (error) {
-                        console.error(`Error sending summary notifications for URL ID ${urlId}:`, error);
                     }
+                    
+                    if (summaryNotifications.length > 0) {
+                        await Promise.all(summaryNotifications);
+                        console.log(`Summary notifications sent to ${allSubscribers.rows.length} subscriber(s) for URL ID ${urlId}`);
+                    }
+                } catch (error) {
+                    console.error(`Error sending summary notifications for URL ID ${urlId}:`, error);
                 }
                 
                 task.stop();
@@ -183,6 +198,8 @@ async function startUrlMonitoring(urlId, websiteUrl) {
 
                 if (content !== previousContent) {
                     console.log(`Change detected for URL ID ${urlId}`);
+                    console.log(`Previous content length: ${previousContent ? previousContent.length : 0}`);
+                    console.log(`New content length: ${content.length}`);
                     changesDetected++;
 
                     // Get all active subscribers for this URL
@@ -197,6 +214,8 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                         AND NOW() < created_at + (polling_duration || ' minutes')::interval
                     `, [urlId]);
 
+                    console.log(`Found ${subscribers.rows.length} active subscriber(s) for URL ID ${urlId}`);
+
                     // Record the change once
                     const changeRecord = await db.query(`
                         INSERT INTO alerts_history 
@@ -209,40 +228,61 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                     if (subscribers.rows && subscribers.rows.length > 0) {
                         for (const subscriber of subscribers.rows) {
                             try {
+                                console.log(`Sending notifications to subscriber ${subscriber.subscriber_id} (email: ${subscriber.email})`);
+                                
                                 // Send notifications
                                 const notifications = [];
                                 
                                 if (subscriber.email) {
+                                    console.log(`Sending email alert to: ${subscriber.email}`);
                                     notifications.push(
                                         emailService.sendAlert(subscriber.email, websiteUrl, previousContent, content)
-                                            .then(() => db.query(
-                                                'UPDATE alerts_history SET email_sent = true WHERE id = $1',
-                                                [changeRecord.rows[0].id]
-                                            ))
-                                            .catch(error => console.error(`Email notification failed for subscriber ${subscriber.subscriber_id}:`, error))
+                                            .then(result => {
+                                                console.log(`Email alert sent successfully to ${subscriber.email}`);
+                                                return db.query(
+                                                    'UPDATE alerts_history SET email_sent = true WHERE id = $1',
+                                                    [changeRecord.rows[0].id]
+                                                );
+                                            })
+                                            .catch(error => {
+                                                console.error(`Email notification failed for subscriber ${subscriber.subscriber_id}:`, error);
+                                                console.error(`Error details: ${error.message}`);
+                                            })
                                     );
                                 }
                                 
                                 if (subscriber.phone_number && subscriber.phone_number.trim() !== '') {
+                                    console.log(`Sending SMS alert to: ${subscriber.phone_number}`);
                                     notifications.push(
                                         smsService.sendAlert(subscriber.phone_number, websiteUrl)
-                                            .then(() => db.query(
-                                                'UPDATE alerts_history SET sms_sent = true WHERE id = $1',
-                                                [changeRecord.rows[0].id]
-                                            ))
-                                            .catch(error => console.error(`SMS notification failed for subscriber ${subscriber.subscriber_id}:`, error))
+                                            .then(() => {
+                                                console.log(`SMS alert sent successfully to ${subscriber.phone_number}`);
+                                                return db.query(
+                                                    'UPDATE alerts_history SET sms_sent = true WHERE id = $1',
+                                                    [changeRecord.rows[0].id]
+                                                );
+                                            })
+                                            .catch(error => {
+                                                console.error(`SMS notification failed for subscriber ${subscriber.subscriber_id}:`, error);
+                                                console.error(`Error details: ${error.message}`);
+                                            })
                                     );
                                 }
                                 
                                 if (notifications.length > 0) {
                                     await Promise.all(notifications);
+                                    console.log(`Notifications completed for subscriber ${subscriber.subscriber_id}`);
                                 }
                             } catch (error) {
                                 console.error(`Error notifying subscriber ${subscriber.subscriber_id}:`, error);
                             }
                         }
+                    } else {
+                        console.log(`No active subscribers found for URL ID ${urlId}`);
                     }
                     
+                } else {
+                    console.log(`No change detected for URL ID ${urlId} - content matches`);
                 }
 
                 previousContent = content;
@@ -505,9 +545,12 @@ app.post('/api/monitor', async (req, res) => {
             try {
                 const notifications = [];
                 if (email) {
+                    console.log(`Preparing to send welcome email to: ${email}`);
+                    console.log(`Email config - USER: ${process.env.EMAIL_USER ? 'SET' : 'NOT SET'}, PASSWORD: ${process.env.EMAIL_PASSWORD ? 'SET' : 'NOT SET'}`);
                     notifications.push(emailService.sendWelcomeEmail(email, websiteUrl, duration));
                 }
                 if (phone && phone.trim() !== '') {
+                    console.log(`Preparing to send welcome SMS to: ${phone}`);
                     notifications.push(smsService.sendWelcomeSMS(phone, websiteUrl, duration));
                 }
                 if (notifications.length > 0) {
@@ -516,6 +559,7 @@ app.post('/api/monitor', async (req, res) => {
                 }
             } catch (error) {
                 console.error('Error sending welcome notifications:', error);
+                console.error('Error stack:', error.stack);
                 // Continue with monitoring even if welcome notifications fail
             }
             
