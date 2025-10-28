@@ -623,10 +623,17 @@ app.get('/api/status', async (req, res) => {
             ),
             change_counts AS (
                 SELECT 
-                    monitored_url_id,
-                    COUNT(DISTINCT detected_at) as changes_count
-                FROM alerts_history
-                GROUP BY monitored_url_id
+                    ah.monitored_url_id,
+                    COUNT(DISTINCT ah.detected_at) as changes_count
+                FROM alerts_history ah
+                WHERE EXISTS (
+                    SELECT 1 
+                    FROM alert_subscribers asub 
+                    WHERE asub.url_id = ah.monitored_url_id
+                      AND ah.detected_at >= asub.created_at
+                      AND ah.detected_at <= asub.created_at + (asub.polling_duration || ' minutes')::interval
+                )
+                GROUP BY ah.monitored_url_id
             ),
             latest_subscriber_info AS (
                 SELECT DISTINCT ON (url_id)
