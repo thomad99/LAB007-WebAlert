@@ -134,7 +134,11 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                     // Send summary to all subscribers
                     for (const sub of allSubscribers.rows) {
                         if (sub.email) {
+                            console.log('========== SENDING SUMMARY EMAIL ==========');
                             console.log(`Preparing to send summary email to: ${sub.email}`);
+                            console.log(`Check count: ${checkCount}`);
+                            console.log(`Changes detected: ${changesDetected}`);
+                            
                             summaryNotifications.push(
                                 emailService.sendSummaryEmail(
                                     sub.email, 
@@ -143,8 +147,16 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                                     checkCount, 
                                     changesDetected,
                                     new Date()
-                                ).then(() => console.log(`Summary email sent successfully to ${sub.email}`))
-                                .catch(error => console.error(`Error sending summary email to ${sub.email}:`, error))
+                                ).then(() => {
+                                    console.log(`Summary email sent successfully to ${sub.email}`);
+                                    console.log('========== SUMMARY EMAIL SENT ==========');
+                                })
+                                .catch(error => {
+                                    console.error('========== SUMMARY EMAIL ERROR ==========');
+                                    console.error(`Error sending summary email to ${sub.email}:`, error);
+                                    console.error('Error stack:', error.stack);
+                                    console.error('========== SUMMARY EMAIL ERROR END ==========');
+                                })
                             );
                         }
                         
@@ -234,19 +246,27 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                                 const notifications = [];
                                 
                                 if (subscriber.email) {
+                                    console.log('========== SENDING ALERT EMAIL ==========');
                                     console.log(`Sending email alert to: ${subscriber.email}`);
+                                    console.log(`Subscriber ID: ${subscriber.subscriber_id}`);
+                                    console.log(`Website URL: ${websiteUrl}`);
+                                    
                                     notifications.push(
                                         emailService.sendAlert(subscriber.email, websiteUrl, previousContent, content)
                                             .then(result => {
                                                 console.log(`Email alert sent successfully to ${subscriber.email}`);
+                                                console.log(`Message ID: ${result.messageId}`);
                                                 return db.query(
                                                     'UPDATE alerts_history SET email_sent = true WHERE id = $1',
                                                     [changeRecord.rows[0].id]
                                                 );
                                             })
                                             .catch(error => {
+                                                console.error('========== ALERT EMAIL SEND FAILED ==========');
                                                 console.error(`Email notification failed for subscriber ${subscriber.subscriber_id}:`, error);
                                                 console.error(`Error details: ${error.message}`);
+                                                console.error(`Error stack:`, error.stack);
+                                                console.error('========== ALERT EMAIL SEND FAILED END ==========');
                                             })
                                     );
                                 }
@@ -543,23 +563,40 @@ app.post('/api/monitor', async (req, res) => {
             
             // Send welcome notifications
             try {
+                console.log('========== SENDING WELCOME NOTIFICATIONS ==========');
                 const notifications = [];
                 if (email) {
                     console.log(`Preparing to send welcome email to: ${email}`);
                     console.log(`Email config - USER: ${process.env.EMAIL_USER ? 'SET' : 'NOT SET'}, PASSWORD: ${process.env.EMAIL_PASSWORD ? 'SET' : 'NOT SET'}`);
-                    notifications.push(emailService.sendWelcomeEmail(email, websiteUrl, duration));
+                    console.log(`Email user value: ${process.env.EMAIL_USER ? process.env.EMAIL_USER.substring(0, 10) + '...' : 'NOT SET'}`);
+                    
+                    notifications.push(
+                        emailService.sendWelcomeEmail(email, websiteUrl, duration)
+                            .then(result => {
+                                console.log('Welcome email sent successfully in server.js');
+                                return result;
+                            })
+                            .catch(error => {
+                                console.error('Welcome email failed in server.js:', error.message);
+                                throw error;
+                            })
+                    );
                 }
                 if (phone && phone.trim() !== '') {
                     console.log(`Preparing to send welcome SMS to: ${phone}`);
                     notifications.push(smsService.sendWelcomeSMS(phone, websiteUrl, duration));
                 }
                 if (notifications.length > 0) {
+                    console.log('Awaiting notification results...');
                     await Promise.all(notifications);
                     console.log('Welcome notifications sent successfully');
                 }
+                console.log('========== WELCOME NOTIFICATIONS COMPLETE ==========');
             } catch (error) {
+                console.error('========== WELCOME NOTIFICATIONS ERROR ==========');
                 console.error('Error sending welcome notifications:', error);
                 console.error('Error stack:', error.stack);
+                console.error('========== WELCOME NOTIFICATIONS ERROR END ==========');
                 // Continue with monitoring even if welcome notifications fail
             }
             

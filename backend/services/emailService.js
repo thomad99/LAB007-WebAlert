@@ -11,14 +11,39 @@ const transporter = nodemailer.createTransport({
 });
 
 async function sendAlert(email, websiteUrl, contentBefore, contentAfter) {
+    console.log('========== EMAIL SEND DEBUG START ==========');
+    console.log('Function called with params:', { email, websiteUrl });
+    
     try {
+        // Check environment variables
+        console.log('Checking environment variables...');
+        console.log('EMAIL_USER:', process.env.EMAIL_USER ? `${process.env.EMAIL_USER.substring(0, 5)}...` : 'NOT SET');
+        console.log('EMAIL_PASSWORD:', process.env.EMAIL_PASSWORD ? '***SET***' : 'NOT SET');
+        
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+            throw new Error('Email credentials not configured. EMAIL_USER and EMAIL_PASSWORD must be set in environment.');
+        }
+        
+        // Check transporter configuration
+        console.log('Transporter configuration:', {
+            service: transporter.options.service,
+            host: transporter.options.host,
+            port: transporter.options.port,
+            secure: transporter.options.secure,
+            auth: {
+                user: transporter.options.auth?.user ? `${transporter.options.auth.user.substring(0, 5)}...` : 'NOT SET',
+                pass: transporter.options.auth?.pass ? '***SET***' : 'NOT SET'
+            }
+        });
+        
         // Verify transporter configuration
         console.log('Verifying email configuration...');
         await transporter.verify();
-        console.log('Email configuration verified');
+        console.log('Email configuration verified successfully');
 
+        console.log('Preparing email content...');
         console.log('Sending email alert to:', email);
-        console.log('Using email account:', process.env.EMAIL_USER);
+        console.log('Website URL:', websiteUrl);
         
         // Create LAB007 logo HTML (base64 encoded or hosted URL)
         const lab007Logo = `
@@ -52,7 +77,7 @@ async function sendAlert(email, websiteUrl, contentBefore, contentAfter) {
             }
         }
         
-        const info = await transporter.sendMail({
+        const mailOptions = {
             from: `"LAB007 Web Alert" <${process.env.EMAIL_USER}>`,
             to: email,
             subject: 'LOVESAILING PAGE UPDATE',
@@ -108,31 +133,59 @@ async function sendAlert(email, websiteUrl, contentBefore, contentAfter) {
                 </body>
                 </html>
             `
+        };
+        
+        console.log('Mail options prepared:', {
+            from: mailOptions.from,
+            to: mailOptions.to,
+            subject: mailOptions.subject,
+            hasText: !!mailOptions.text,
+            hasHtml: !!mailOptions.html
         });
         
-        console.log('Email sent:', {
+        console.log('Attempting to send email...');
+        const info = await transporter.sendMail(mailOptions);
+        
+        console.log('Email sent successfully!');
+        console.log('Email send result:', {
             messageId: info.messageId,
             response: info.response,
             accepted: info.accepted,
             rejected: info.rejected
         });
+        console.log('========== EMAIL SEND DEBUG END ==========');
         
         return info;
     } catch (error) {
-        console.error('Error sending email:', {
-            error: error.message,
-            stack: error.stack,
-            emailUser: process.env.EMAIL_USER,
+        console.error('========== EMAIL SEND ERROR ==========');
+        console.error('Error type:', error.constructor.name);
+        console.error('Error message:', error.message);
+        console.error('Error code:', error.code);
+        console.error('Error response:', error.response);
+        console.error('Error responseCode:', error.responseCode);
+        console.error('Error command:', error.command);
+        console.error('Error stack:', error.stack);
+        console.error('Email credentials check:', {
+            emailUser: process.env.EMAIL_USER ? 'SET' : 'NOT SET',
             hasPassword: !!process.env.EMAIL_PASSWORD
         });
+        console.error('========== EMAIL SEND ERROR END ==========');
         throw error;
     }
 }
 
 async function sendWelcomeEmail(email, websiteUrl, duration) {
+    console.log('========== WELCOME EMAIL DEBUG START ==========');
+    console.log('Sending welcome email to:', email);
+    console.log('Website URL:', websiteUrl);
+    console.log('Duration:', duration);
+    
     try {
-        console.log('Sending welcome email to:', email);
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+            throw new Error('Email credentials not configured');
+        }
         
+        console.log('Preparing welcome email...');
         const info = await transporter.sendMail({
             from: `"Web Alert Service" <${process.env.EMAIL_USER}>`,
             to: email,
@@ -150,22 +203,36 @@ async function sendWelcomeEmail(email, websiteUrl, duration) {
             `
         });
         
-        console.log('Welcome email sent:', info.messageId);
+        console.log('Welcome email sent successfully:', info.messageId);
+        console.log('========== WELCOME EMAIL DEBUG END ==========');
         return info;
     } catch (error) {
-        console.error('Error sending welcome email:', error);
+        console.error('========== WELCOME EMAIL ERROR ==========');
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        console.error('========== WELCOME EMAIL ERROR END ==========');
         throw error;
     }
 }
 
 async function sendSummaryEmail(email, websiteUrl, duration, checkCount, changesDetected, lastCheck) {
+    console.log('========== SUMMARY EMAIL DEBUG START ==========');
+    console.log('Sending summary email to:', email);
+    console.log('Website URL:', websiteUrl);
+    console.log('Duration:', duration);
+    console.log('Check count:', checkCount);
+    console.log('Changes detected:', changesDetected);
+    
     try {
-        console.log('Sending summary email to:', email);
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+            throw new Error('Email credentials not configured');
+        }
         
         const summaryText = changesDetected > 0 
             ? `We detected ${changesDetected} change(s) during monitoring.`
             : 'No changes were detected during monitoring.';
         
+        console.log('Preparing summary email...');
         const info = await transporter.sendMail({
             from: `"Web Alert Service" <${process.env.EMAIL_USER}>`,
             to: email,
@@ -186,10 +253,14 @@ async function sendSummaryEmail(email, websiteUrl, duration, checkCount, changes
             `
         });
         
-        console.log('Summary email sent:', info.messageId);
+        console.log('Summary email sent successfully:', info.messageId);
+        console.log('========== SUMMARY EMAIL DEBUG END ==========');
         return info;
     } catch (error) {
-        console.error('Error sending summary email:', error);
+        console.error('========== SUMMARY EMAIL ERROR ==========');
+        console.error('Error message:', error.message);
+        console.error('Error stack:', error.stack);
+        console.error('========== SUMMARY EMAIL ERROR END ==========');
         throw error;
     }
 }
