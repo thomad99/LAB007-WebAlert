@@ -40,12 +40,59 @@ process.on('unhandledRejection', (reason, promise) => {
 app.use(cors());
 app.use(express.json());
 
-// Update the static file serving
-app.use(express.static(path.join(__dirname, '../frontend/public')));
-app.use('/src', express.static(path.join(__dirname, '../frontend/src')));
+// Add request logging middleware at the very top to catch ALL requests
+app.use((req, res, next) => {
+    console.log(`[Web-Alert] ===== INCOMING REQUEST =====`);
+    console.log(`[Web-Alert] Method: ${req.method}`);
+    console.log(`[Web-Alert] Path: ${req.path}`);
+    console.log(`[Web-Alert] Original URL: ${req.originalUrl}`);
+    console.log(`[Web-Alert] Base URL: ${req.baseUrl}`);
+    console.log(`[Web-Alert] URL: ${req.url}`);
+    console.log(`[Web-Alert] ===========================`);
+    next();
+});
 
 // Store active monitoring tasks
 const monitoringTasks = new Map();
+
+// Function to clean/filter HTML content by removing ad-related content
+function cleanContentForComparison(html) {
+    if (!html) return '';
+    
+    let cleaned = html;
+    
+    // Remove ad-related patterns
+    // 1. Ad click tracking URLs (e.g., /api/ads/click?ad=)
+    cleaned = cleaned.replace(/href="[^"]*\/api\/ads\/click[^"]*"/gi, '');
+    cleaned = cleaned.replace(/href='[^']*\/api\/ads\/click[^']*'/gi, '');
+    
+    // 2. Common ad container patterns
+    cleaned = cleaned.replace(/<[^>]*class="[^"]*ad[s]?[^"]*"[^>]*>.*?<\/[^>]+>/gis, '');
+    cleaned = cleaned.replace(/<[^>]*id="[^"]*ad[s]?[^"]*"[^>]*>.*?<\/[^>]+>/gis, '');
+    
+    // 3. Ad script tags
+    cleaned = cleaned.replace(/<script[^>]*>.*?(ads?|advertisement|adserving).*?<\/script>/gis, '');
+    
+    // 4. Google AdSense patterns
+    cleaned = cleaned.replace(/<[^>]*data-ad-[^>]*>.*?<\/[^>]+>/gis, '');
+    cleaned = cleaned.replace(/<ins[^>]*class="[^"]*adsbygoogle[^"]*"[^>]*>.*?<\/ins>/gis, '');
+    
+    // 5. Ad iframes
+    cleaned = cleaned.replace(/<iframe[^>]*(ads?|advertisement|doubleclick|googleadservices)[^>]*>.*?<\/iframe>/gis, '');
+    
+    // 6. Ad-related attributes in any tag
+    cleaned = cleaned.replace(/\s+data-ad-[^=]*="[^"]*"/gi, '');
+    cleaned = cleaned.replace(/\s+data-ads-[^=]*="[^"]*"/gi, '');
+    
+    // 7. Empty ad href attributes that might be left over
+    cleaned = cleaned.replace(/href="[^"]*\/api\/ads[^"]*"/gi, '');
+    
+    // Normalize whitespace to avoid false positives from formatting changes
+    cleaned = cleaned.replace(/\s+/g, ' ');
+    cleaned = cleaned.trim();
+    
+    return cleaned;
+}
 
 // Function to start monitoring a URL
 async function startUrlMonitoring(urlId, websiteUrl) {
@@ -123,7 +170,7 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                     
                     // Get all subscribers for this URL to send summary
                     const allSubscribers = await db.query(`
-                        SELECT email, phone_number, polling_duration
+                        SELECT id as subscriber_id, email, phone_number, polling_duration
                         FROM alert_subscribers 
                         WHERE url_id = $1
                         ORDER BY created_at DESC
@@ -146,7 +193,8 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                                     sub.polling_duration, 
                                     checkCount, 
                                     changesDetected,
-                                    new Date()
+                                    new Date(),
+                                    sub.subscriber_id
                                 ).then(() => {
                                     console.log(`Summary email sent successfully to ${sub.email}`);
                                     console.log('========== SUMMARY EMAIL SENT ==========');
@@ -208,7 +256,11 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                     [urlId]
                 );
 
-                if (content !== previousContent) {
+                // Clean content before comparison to filter out ad-related changes
+                const cleanedContent = cleanContentForComparison(content);
+                const cleanedPreviousContent = cleanContentForComparison(previousContent);
+
+                if (cleanedContent !== cleanedPreviousContent) {
                     console.log(`Change detected for URL ID ${urlId}`);
                     console.log(`Previous content length: ${previousContent ? previousContent.length : 0}`);
                     console.log(`New content length: ${content.length}`);
@@ -252,7 +304,7 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                                     console.log(`Website URL: ${websiteUrl}`);
                                     
                                     notifications.push(
-                                        emailService.sendAlert(subscriber.email, websiteUrl, previousContent, content)
+                                        emailService.sendAlert(subscriber.email, websiteUrl, previousContent, content, subscriber.subscriber_id)
                                             .then(result => {
                                                 console.log(`Email alert sent successfully to ${subscriber.email}`);
                                                 console.log(`Message ID: ${result.messageId}`);
@@ -302,9 +354,10 @@ async function startUrlMonitoring(urlId, websiteUrl) {
                     }
                     
                 } else {
-                    console.log(`No change detected for URL ID ${urlId} - content matches`);
+                    console.log(`No change detected for URL ID ${urlId} - content matches (after filtering ads)`);
                 }
 
+                // Store the original content (not cleaned) for display purposes
                 previousContent = content;
             }
 
@@ -316,12 +369,16 @@ async function startUrlMonitoring(urlId, websiteUrl) {
     monitoringTasks.set(urlId, task);
 }
 
-// Test database connection
-db.connect(async (err) => {
-    if (err) {
-        console.error('Database connection error:', err);
-    } else {
-        console.log('Database connected successfully');
+// Test database connection (non-blocking - app will work even if DB is unavailable)
+// Wait a bit for the pool to initialize, then test connection
+setTimeout(() => {
+    db.connect(async (err) => {
+        if (err) {
+            console.warn('Database connection error (non-fatal):', err.message);
+            console.warn('Web-Alert API endpoints will not work until database is available');
+            console.warn('Other services (3D Print, Citrix, VINValue) will continue to work normally');
+        } else {
+            console.log('Database connected successfully');
         try {
             // Initialize schema
             console.log('Initializing database schema...');
@@ -413,19 +470,20 @@ db.connect(async (err) => {
             console.log(`Resumed monitoring for ${activeUrls.rows.length} active URLs`);
 
         } catch (error) {
-            console.error('Error initializing database schema:', error);
-            console.error('Error details:', error.stack);
+            console.warn('Error initializing database schema (non-fatal):', error.message);
+            console.warn('Database will be retried when API endpoints are accessed');
             // Log additional diagnostic information
-            console.error('Current directory:', process.cwd());
-            console.error('Environment:', process.env.NODE_ENV);
-            console.error('Database config:', {
+            console.warn('Current directory:', process.cwd());
+            console.warn('Environment:', process.env.NODE_ENV);
+            console.warn('Database config:', {
                 host: process.env.DB_HOST,
                 database: process.env.DB_NAME,
                 port: process.env.DB_PORT
             });
         }
     }
-});
+    });
+}, 2000); // Wait 2 seconds for pool initialization
 
 // Add specific routes for HTML files
 app.get('/', (req, res) => {
@@ -434,6 +492,99 @@ app.get('/', (req, res) => {
 
 app.get('/status.html', (req, res) => {
     res.sendFile(path.join(__dirname, '../frontend/public/status.html'));
+});
+
+app.get('/stop/:id', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/public/stop.html'));
+});
+
+// API endpoint to get subscriber information
+app.get('/api/subscriber/:id', async (req, res) => {
+    try {
+        const subscriberId = parseInt(req.params.id);
+        if (isNaN(subscriberId)) {
+            return res.status(400).json({ success: false, error: 'Invalid subscriber ID' });
+        }
+        
+        const result = await db.query(`
+            SELECT 
+                s.id,
+                s.email,
+                s.phone_number,
+                s.polling_duration,
+                s.is_active,
+                s.created_at,
+                u.website_url
+            FROM alert_subscribers s
+            JOIN monitored_urls u ON s.url_id = u.id
+            WHERE s.id = $1
+        `, [subscriberId]);
+        
+        if (!result.rows || result.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Subscriber not found' });
+        }
+        
+        res.json({
+            success: true,
+            subscriber: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Error fetching subscriber:', error);
+        res.status(500).json({ success: false, error: 'Failed to fetch subscriber information' });
+    }
+});
+
+// API endpoint to stop alerts for a specific subscriber
+app.post('/api/stop/:id', async (req, res) => {
+    try {
+        const subscriberId = parseInt(req.params.id);
+        if (isNaN(subscriberId)) {
+            return res.status(400).json({ success: false, error: 'Invalid subscriber ID' });
+        }
+        
+        // Get subscriber info to find url_id
+        const subscriberResult = await db.query(`
+            SELECT url_id FROM alert_subscribers WHERE id = $1
+        `, [subscriberId]);
+        
+        if (!subscriberResult.rows || subscriberResult.rows.length === 0) {
+            return res.status(404).json({ success: false, error: 'Subscriber not found' });
+        }
+        
+        const urlId = subscriberResult.rows[0].url_id;
+        
+        // Deactivate the subscriber
+        await db.query(`
+            UPDATE alert_subscribers 
+            SET is_active = false 
+            WHERE id = $1
+        `, [subscriberId]);
+        
+        // Check if there are any other active subscribers for this URL
+        const activeSubscribers = await db.query(`
+            SELECT COUNT(*) as count 
+            FROM alert_subscribers 
+            WHERE url_id = $1 AND is_active = true
+        `, [urlId]);
+        
+        // If no active subscribers, stop monitoring
+        if (parseInt(activeSubscribers.rows[0].count) === 0) {
+            const task = monitoringTasks.get(urlId);
+            if (task) {
+                console.log(`Stopping monitoring for URL ID ${urlId} - no active subscribers`);
+                task.stop();
+                monitoringTasks.delete(urlId);
+            }
+        }
+        
+        res.json({
+            success: true,
+            message: 'Alerts stopped successfully'
+        });
+    } catch (error) {
+        console.error('Error stopping alerts:', error);
+        res.status(500).json({ success: false, error: 'Failed to stop alerts' });
+    }
 });
 
 app.get('/MOVING.html', (req, res) => {
@@ -462,11 +613,17 @@ app.get('/health', (req, res) => {
 
 // API endpoint to start monitoring
 app.post('/api/monitor', async (req, res) => {
+    console.log('[Web-Alert API] POST /api/monitor called');
+    console.log('[Web-Alert API] Request path:', req.path);
+    console.log('[Web-Alert API] Request originalUrl:', req.originalUrl);
+    console.log('[Web-Alert API] Request baseUrl:', req.baseUrl);
+    console.log('[Web-Alert API] Request body:', req.body);
+    
     let { websiteUrl, email, phone, duration } = req.body;
 
     try {
         // Log the incoming request
-        console.log('Received monitoring request:', { websiteUrl, email, phone, duration });
+        console.log('[Web-Alert API] Received monitoring request:', { websiteUrl, email, phone, duration });
 
         // Normalize the URL
         if (websiteUrl.toLowerCase().includes('moving.html')) {
@@ -570,8 +727,9 @@ app.post('/api/monitor', async (req, res) => {
                     console.log(`Email config - USER: ${process.env.EMAIL_USER ? 'SET' : 'NOT SET'}, PASSWORD: ${process.env.EMAIL_PASSWORD ? 'SET' : 'NOT SET'}`);
                     console.log(`Email user value: ${process.env.EMAIL_USER ? process.env.EMAIL_USER.substring(0, 10) + '...' : 'NOT SET'}`);
                     
+                    const subscriberId = subscriber.rows[0].id;
                     notifications.push(
-                        emailService.sendWelcomeEmail(email, websiteUrl, duration)
+                        emailService.sendWelcomeEmail(email, websiteUrl, duration, subscriberId)
                             .then(result => {
                                 console.log('Welcome email sent successfully in server.js');
                                 return result;
@@ -621,8 +779,9 @@ app.post('/api/monitor', async (req, res) => {
         res.json(response);
 
     } catch (error) {
-        console.error('Error in /api/monitor:', error);
-        console.error('Stack:', error.stack);
+        console.error('[Web-Alert API] Error in /api/monitor:', error);
+        console.error('[Web-Alert API] Error message:', error.message);
+        console.error('[Web-Alert API] Error stack:', error.stack);
         res.status(500).json({ 
             success: false,
             error: 'Failed to start monitoring',
@@ -653,7 +812,7 @@ app.get('/api/status', async (req, res) => {
                 SELECT 
                     url_id,
                     COUNT(*) as subscriber_count,
-                    MAX(created_at + (polling_duration || ' minutes')::interval) as latest_end_time
+                    MAX(created_at + COALESCE(polling_duration, 0) * interval '1 minute') as latest_end_time
                 FROM alert_subscribers
                 WHERE is_active = true
                 GROUP BY url_id
@@ -668,7 +827,7 @@ app.get('/api/status', async (req, res) => {
                     FROM alert_subscribers asub 
                     WHERE asub.url_id = ah.monitored_url_id
                       AND ah.detected_at >= asub.created_at
-                      AND ah.detected_at <= asub.created_at + (asub.polling_duration || ' minutes')::interval
+                      AND ah.detected_at <= asub.created_at + COALESCE(asub.polling_duration, 0) * interval '1 minute'
                 )
                 GROUP BY ah.monitored_url_id
             ),
@@ -695,14 +854,16 @@ app.get('/api/status', async (req, res) => {
                 lsi.phone_number,
                 lsi.polling_duration,
                 CASE 
-                    WHEN lsi.id IS NOT NULL AND lsi.is_active = true AND NOW() < lsi.created_at + (lsi.polling_duration || ' minutes')::interval
-                    THEN EXTRACT(EPOCH FROM (lsi.created_at + (lsi.polling_duration || ' minutes')::interval) - NOW())/60
+                    WHEN lsi.id IS NOT NULL AND lsi.is_active = true AND lsi.polling_duration IS NOT NULL AND lsi.created_at IS NOT NULL
+                         AND NOW() < lsi.created_at + COALESCE(lsi.polling_duration, 0) * interval '1 minute'
+                    THEN EXTRACT(EPOCH FROM (lsi.created_at + COALESCE(lsi.polling_duration, 0) * interval '1 minute' - NOW()))/60
                     ELSE 0
                 END as minutes_left,
                 COALESCE(cc.changes_count, 0) as changes_count,
                 COALESCE(as_count.subscriber_count, 0) as subscriber_count,
                 CASE 
-                    WHEN lsi.url_id IS NOT NULL AND lsi.is_active = true AND NOW() < lsi.created_at + (lsi.polling_duration || ' minutes')::interval
+                    WHEN lsi.url_id IS NOT NULL AND lsi.is_active = true AND lsi.polling_duration IS NOT NULL AND lsi.created_at IS NOT NULL
+                         AND NOW() < lsi.created_at + COALESCE(lsi.polling_duration, 0) * interval '1 minute'
                     THEN 'Active'
                     ELSE 'Completed'
                 END as status_text
@@ -744,11 +905,17 @@ app.get('/api/status', async (req, res) => {
         console.log('Sending formatted status response:', formattedResults);
         res.json(formattedResults);
     } catch (error) {
-        console.error('Error fetching status:', error);
-        console.error('Error details:', error.stack);
+        console.error('========== ERROR FETCHING STATUS ==========');
+        console.error('Error message:', error.message);
+        console.error('Error code:', error.code);
+        console.error('Error detail:', error.detail);
+        console.error('Error hint:', error.hint);
+        console.error('Error stack:', error.stack);
+        console.error('===========================================');
         res.status(500).json({ 
             error: 'Failed to fetch monitoring status',
             message: error.message,
+            detail: error.detail || error.hint || 'No additional details',
             timestamp: new Date().toISOString()
         });
     }
@@ -796,11 +963,18 @@ app.get('/api/test-db', async (req, res) => {
     }
 });
 
-// Add route logging middleware at the top
+// Add route logging middleware (but skip static file requests to reduce noise)
 app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-    console.log('Request body:', req.body);
-    console.log('Request query:', req.query);
+    // Skip logging for static assets (images, CSS, JS) to reduce log noise
+    const staticExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.css', '.js', '.ico', '.svg', '.woff', '.woff2', '.ttf', '.eot'];
+    const isStaticFile = staticExtensions.some(ext => req.path.toLowerCase().endsWith(ext));
+    
+    if (!isStaticFile) {
+        console.log(`[Web-Alert] ${new Date().toISOString()} - ${req.method} ${req.path}`);
+        console.log(`[Web-Alert] Original URL: ${req.originalUrl}, Base URL: ${req.baseUrl}`);
+        console.log(`[Web-Alert] Request body:`, req.body);
+        console.log(`[Web-Alert] Request query:`, req.query);
+    }
     next();
 });
 
@@ -1385,28 +1559,59 @@ app.use((err, req, res, next) => {
     res.status(500).send('Something broke!');
 });
 
-// Modify the server startup
-const PORT = process.env.PORT || 3000;
-const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server is running on port ${PORT}`);
-    console.log('Environment:', process.env.NODE_ENV);
-    console.log('Database host:', process.env.DB_HOST);
-    console.log('Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
-    console.log('Current working directory:', process.cwd());
-    console.log('Directory contents:', require('fs').readdirSync('.'));
-}).on('error', (err) => {
-    console.error('Server failed to start:', err);
-    process.exit(1);
-});
+// Modify the server startup (only if running as standalone)
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  const server = app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server is running on port ${PORT}`);
+      console.log('Environment:', process.env.NODE_ENV);
+      console.log('Database host:', process.env.DB_HOST);
+      console.log('Chrome path:', process.env.PUPPETEER_EXECUTABLE_PATH);
+      console.log('Current working directory:', process.cwd());
+      console.log('Directory contents:', require('fs').readdirSync('.'));
+  }).on('error', (err) => {
+      console.error('Server failed to start:', err);
+      process.exit(1);
+  });
 
-// Add graceful shutdown
-process.on('SIGTERM', () => {
-    console.log('SIGTERM received. Shutting down gracefully...');
-    server.close(() => {
-        console.log('Server closed');
-        process.exit(0);
-    });
-});
+  // Add graceful shutdown
+  process.on('SIGTERM', () => {
+      console.log('SIGTERM received. Shutting down gracefully...');
+      server.close(() => {
+          console.log('Server closed');
+          process.exit(0);
+      });
+  });
+} else {
+  // Being required as a module - export the app
+  console.log('[Web-Alert] App is being required as a module (not running standalone)');
+  console.log('[Web-Alert] Logging registered routes after initialization...');
+  
+  // Log all registered routes after a short delay to ensure all routes are registered
+  setTimeout(() => {
+    console.log('[Web-Alert] === Registered Routes ===');
+    if (app._router && app._router.stack) {
+      let routeCount = 0;
+      app._router.stack.forEach((middleware, index) => {
+        if (middleware.route) {
+          const methods = Object.keys(middleware.route.methods).join(', ').toUpperCase();
+          console.log(`  [${index}] ${methods} ${middleware.route.path}`);
+          routeCount++;
+        } else if (middleware.name === 'router') {
+          console.log(`  [${index}] Router middleware`);
+        } else if (middleware.name) {
+          console.log(`  [${index}] ${middleware.name} middleware`);
+        }
+      });
+      console.log(`[Web-Alert] Total routes found: ${routeCount}`);
+    } else {
+      console.log('  Router stack not available yet');
+    }
+    console.log('[Web-Alert] === End Routes ===');
+  }, 200);
+  
+  module.exports = app;
+}
 
 // Add these new endpoints near the other API endpoints
 
@@ -1624,3 +1829,29 @@ app.post('/api/test-sms', async (req, res) => {
         });
     }
 });
+
+// Catch-all for unmatched API routes (before static file serving)
+app.use((req, res, next) => {
+    // Only handle if it's an API route and hasn't been handled
+    if (req.path.startsWith('/api/')) {
+        console.error(`[Web-Alert] ===== 404 - UNMATCHED API ROUTE =====`);
+        console.error(`[Web-Alert] Method: ${req.method}`);
+        console.error(`[Web-Alert] Path: ${req.path}`);
+        console.error(`[Web-Alert] Original URL: ${req.originalUrl}`);
+        console.error(`[Web-Alert] Base URL: ${req.baseUrl}`);
+        console.error(`[Web-Alert] URL: ${req.url}`);
+        console.error(`[Web-Alert] =====================================`);
+        return res.status(404).json({ 
+            error: `API route not found: ${req.method} ${req.path}`,
+            originalUrl: req.originalUrl,
+            baseUrl: req.baseUrl,
+            path: req.path,
+            url: req.url
+        });
+    }
+    next();
+});
+
+// Static file serving - must come AFTER all API routes to avoid conflicts
+app.use(express.static(path.join(__dirname, '../frontend/public')));
+app.use('/src', express.static(path.join(__dirname, '../frontend/src')));
