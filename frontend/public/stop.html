@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stop Web Alerts - LAB007</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f5f5f5;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .container {
+            background-color: white;
+            padding: 40px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            max-width: 600px;
+            width: 100%;
+        }
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo img {
+            max-width: 200px;
+            height: auto;
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .alert-info {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .alert-info p {
+            margin-bottom: 10px;
+            color: #495057;
+        }
+        .alert-info strong {
+            color: #212529;
+        }
+        .alert-info a {
+            color: #0066cc;
+            text-decoration: none;
+            word-break: break-all;
+        }
+        .alert-info a:hover {
+            text-decoration: underline;
+        }
+        .stop-button {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            background-color: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-bottom: 20px;
+            transition: background-color 0.3s;
+        }
+        .stop-button:hover {
+            background-color: #c82333;
+        }
+        .stop-button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        .message {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .message.success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .message.error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .message.info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        .loading {
+            text-align: center;
+            color: #6c757d;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <img src="https://raw.githubusercontent.com/thomad99/LAB007-Main/master/LAB007/Images/lab007-trans.PNG" alt="LAB007 Logo">
+        </div>
+        
+        <h1>Stop Web Alerts</h1>
+        
+        <div id="message"></div>
+        <div id="loading" class="loading">Loading alert settings...</div>
+        
+        <div id="alertInfo" class="alert-info" style="display: none;">
+            <p><strong>Website URL:</strong> <a href="" id="websiteUrl" target="_blank"></a></p>
+            <p><strong>Email:</strong> <span id="email"></span></p>
+            <p><strong>Duration:</strong> <span id="duration"></span> minutes</p>
+            <p><strong>Poll Period:</strong> Every 3 minutes</p>
+            <p><strong>Start Time:</strong> <span id="startTime"></span></p>
+            <p><strong>Status:</strong> <span id="status"></span></p>
+        </div>
+        
+        <button id="stopButton" class="stop-button" style="display: none;" onclick="stopAlerts()">Stop Alerts</button>
+        
+        <div style="text-align: center; margin-top: 30px;">
+            <a href="/webalert" style="color: #0066cc; text-decoration: none;">← Back to Web Alert Main Page</a>
+        </div>
+    </div>
+
+    <script>
+        const subscriberId = window.location.pathname.split('/').pop();
+        
+        async function loadAlertInfo() {
+            try {
+                const response = await fetch(`/webalert/api/subscriber/${subscriberId}`);
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('alertInfo').style.display = 'block';
+                    document.getElementById('stopButton').style.display = 'block';
+                    
+                    document.getElementById('websiteUrl').href = data.subscriber.website_url;
+                    document.getElementById('websiteUrl').textContent = data.subscriber.website_url;
+                    document.getElementById('email').textContent = data.subscriber.email;
+                    document.getElementById('duration').textContent = data.subscriber.polling_duration;
+                    document.getElementById('startTime').textContent = new Date(data.subscriber.created_at).toLocaleString();
+                    document.getElementById('status').textContent = data.subscriber.is_active ? 'Active' : 'Inactive';
+                    document.getElementById('status').style.color = data.subscriber.is_active ? '#28a745' : '#dc3545';
+                } else {
+                    showMessage('error', data.error || 'Failed to load alert information');
+                    document.getElementById('loading').style.display = 'none';
+                }
+            } catch (error) {
+                console.error('Error loading alert info:', error);
+                showMessage('error', 'Failed to load alert information. Please try again later.');
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+        
+        async function stopAlerts() {
+            const button = document.getElementById('stopButton');
+            button.disabled = true;
+            button.textContent = 'Stopping...';
+            
+            try {
+                const response = await fetch(`/webalert/api/stop/${subscriberId}`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('success', 'Alerts have been stopped successfully.');
+                    button.style.display = 'none';
+                    document.getElementById('status').textContent = 'Inactive';
+                    document.getElementById('status').style.color = '#dc3545';
+                } else {
+                    showMessage('error', data.error || 'Failed to stop alerts');
+                    button.disabled = false;
+                    button.textContent = 'Stop Alerts';
+                }
+            } catch (error) {
+                console.error('Error stopping alerts:', error);
+                showMessage('error', 'Failed to stop alerts. Please try again later.');
+                button.disabled = false;
+                button.textContent = 'Stop Alerts';
+            }
+        }
+        
+        function showMessage(type, message) {
+            const messageDiv = document.getElementById('message');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = message;
+            messageDiv.style.display = 'block';
+        }
+        
+        // Load alert info when page loads
+        loadAlertInfo();
+    </script>
+</body>
+</html>
+

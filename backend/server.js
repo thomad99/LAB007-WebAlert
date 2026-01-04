@@ -95,7 +95,7 @@ function cleanContentForComparison(html) {
 }
 
 // Function to start monitoring a URL
-async function startUrlMonitoring(urlId, websiteUrl) {
+async function startUrlMonitoring(urlId, websiteUrl, pollingInterval = 3) {
     if (!urlId || !websiteUrl) {
         console.error('Invalid parameters for startUrlMonitoring:', { urlId, websiteUrl });
         throw new Error('Invalid monitoring parameters');
@@ -106,7 +106,10 @@ async function startUrlMonitoring(urlId, websiteUrl) {
         return;
     }
 
-    console.log(`Starting monitoring for URL ID ${urlId}: ${websiteUrl}`);
+    // Ensure polling interval is valid (1-60 minutes)
+    pollingInterval = Math.max(1, Math.min(60, parseInt(pollingInterval) || 3));
+
+    console.log(`Starting monitoring for URL ID ${urlId}: ${websiteUrl} (polling every ${pollingInterval} minutes)`);
     let previousContent = null;
     let changesDetected = 0;
     let subscriberInfo = null;
@@ -121,9 +124,10 @@ async function startUrlMonitoring(urlId, websiteUrl) {
             SET last_check = NOW(), 
                 last_content = $1, 
                 last_debug = $2,
-                check_count = 0
+                check_count = 0,
+                polling_interval = $4
             WHERE id = $3
-        `, [initialScrape.content, JSON.stringify(initialScrape.debug), urlId]);
+        `, [initialScrape.content, JSON.stringify(initialScrape.debug), urlId, pollingInterval]);
 
         console.log(`Initial scrape completed for URL ID ${urlId} - baseline content established`);
         
@@ -144,8 +148,10 @@ async function startUrlMonitoring(urlId, websiteUrl) {
         console.error(`Error during initial scrape for URL ID ${urlId}:`, error);
     }
 
-    // Schedule monitoring every 3 minutes
-    const task = cron.schedule('*/3 * * * *', async () => {
+    // Schedule monitoring based on polling interval
+    const cronExpression = `*/${pollingInterval} * * * *`;
+    console.log(`Scheduling cron job with expression: ${cronExpression}`);
+    const task = cron.schedule(cronExpression, async () => {
         try {
             // Check if there are any active subscribers before proceeding
             const activeSubscribers = await db.query(`
@@ -394,9 +400,21 @@ setTimeout(() => {
                     last_debug JSONB,
                     check_count INTEGER DEFAULT 0,
                     is_active BOOLEAN DEFAULT true,
+                    polling_interval INTEGER DEFAULT 3,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
             `);
+            
+            // Add polling_interval column if it doesn't exist (for existing databases)
+            try {
+                await db.query(`
+                    ALTER TABLE monitored_urls 
+                    ADD COLUMN IF NOT EXISTS polling_interval INTEGER DEFAULT 3
+                `);
+            } catch (error) {
+                // Column might already exist, ignore error
+                console.log('polling_interval column already exists or error adding it:', error.message);
+            }
 
             // Create alert_subscribers table
             console.log('Creating alert_subscribers table...');
@@ -459,13 +477,14 @@ setTimeout(() => {
 
             // Start monitoring for any existing active URLs
             const activeUrls = await db.query(`
-                SELECT id, website_url 
+                SELECT id, website_url, polling_interval 
                 FROM monitored_urls 
                 WHERE is_active = true
             `);
 
             for (const url of activeUrls.rows) {
-                await startUrlMonitoring(url.id, url.website_url);
+                const pollingInterval = url.polling_interval || 3;
+                await startUrlMonitoring(url.id, url.website_url, pollingInterval);
             }
             console.log(`Resumed monitoring for ${activeUrls.rows.length} active URLs`);
 
@@ -619,11 +638,16 @@ app.post('/api/monitor', async (req, res) => {
     console.log('[Web-Alert API] Request baseUrl:', req.baseUrl);
     console.log('[Web-Alert API] Request body:', req.body);
     
-    let { websiteUrl, email, phone, duration } = req.body;
+    let { websiteUrl, email, phone, duration, pollingInterval } = req.body;
 
     try {
+        // Default polling interval to 3 minutes if not provided
+        pollingInterval = pollingInterval || 3;
+        // Ensure polling interval is between 1 and 60 minutes
+        pollingInterval = Math.max(1, Math.min(60, parseInt(pollingInterval) || 3));
+        
         // Log the incoming request
-        console.log('[Web-Alert API] Received monitoring request:', { websiteUrl, email, phone, duration });
+        console.log('[Web-Alert API] Received monitoring request:', { websiteUrl, email, phone, duration, pollingInterval });
 
         // Normalize the URL
         if (websiteUrl.toLowerCase().includes('moving.html')) {
@@ -651,8 +675,8 @@ app.post('/api/monitor', async (req, res) => {
         if (!urlRecord.rows || urlRecord.rows.length === 0) {
             console.log('Creating new URL record...');
             const newUrl = await db.query(
-                'INSERT INTO monitored_urls (website_url, is_active) VALUES ($1, true) RETURNING *',
-                [websiteUrl]
+                'INSERT INTO monitored_urls (website_url, is_active, polling_interval) VALUES ($1, true, $2) RETURNING *',
+                [websiteUrl, pollingInterval]
             );
             
             if (!newUrl.rows || newUrl.rows.length === 0) {
@@ -665,10 +689,10 @@ app.post('/api/monitor', async (req, res) => {
             urlId = urlRecord.rows[0].id;
             console.log('Found existing URL record with ID:', urlId);
 
-            // Reactivate the URL if it was inactive
+            // Reactivate the URL if it was inactive and update polling interval
             await db.query(
-                'UPDATE monitored_urls SET is_active = true WHERE id = $1',
-                [urlId]
+                'UPDATE monitored_urls SET is_active = true, polling_interval = $2 WHERE id = $1',
+                [urlId, pollingInterval]
             );
         }
 
@@ -758,7 +782,7 @@ app.post('/api/monitor', async (req, res) => {
                 // Continue with monitoring even if welcome notifications fail
             }
             
-            await startUrlMonitoring(urlId, websiteUrl);
+            await startUrlMonitoring(urlId, websiteUrl, pollingInterval);
         } else {
             console.log('Monitoring already active');
         }
@@ -798,7 +822,8 @@ app.get('/api/status', async (req, res) => {
         
         // Check database connection first
         if (!db.pool) {
-            throw new Error('Database connection not available');
+            console.error('Database pool not available, returning empty array');
+            return res.json([]);
         }
         
         // Note: We're NOT automatically stopping expired tasks anymore

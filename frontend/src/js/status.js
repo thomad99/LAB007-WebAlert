@@ -12,7 +12,7 @@ window.onerror = function(msg, url, lineNo, columnNo, error) {
 async function fetchStatus() {
     try {
         console.log('Fetching status...');
-        const response = await fetch('/api/status');
+        const response = await fetch('api/status');
         const data = await response.json();
         console.log('Status data:', data);
         
@@ -26,7 +26,7 @@ async function fetchStatus() {
         // Fetch alert counts for each monitoring task
         const alertCounts = await Promise.all(
             data.map(item => 
-                fetch(`/api/alerts-history/${item.id}`)
+                fetch(`api/alerts-history/${item.id}`)
                     .then(res => res.json())
                     .then(alerts => ({
                         alertId: item.id,
@@ -88,7 +88,7 @@ async function fetchStatus() {
 // Add this test function
 async function testDatabaseConnection() {
     try {
-        const response = await fetch('/api/health');
+        const response = await fetch('api/health');
         const data = await response.json();
         console.log('Database health check:', data);
     } catch (error) {
@@ -104,7 +104,7 @@ setInterval(fetchStatus, 30000);
 // Add this function to view content
 async function viewContent(alertId) {
     try {
-        const response = await fetch(`/api/content/${alertId}`);
+        const response = await fetch(`api/content/${alertId}`);
         const data = await response.json();
         
         const modal = document.createElement('div');
@@ -152,7 +152,7 @@ async function viewContent(alertId) {
 // Add this function to view debug info
 async function viewDebug(alertId) {
     try {
-        const response = await fetch(`/api/debug/${alertId}`);
+        const response = await fetch(`api/debug/${alertId}`);
         const data = await response.json();
         
         const modal = document.createElement('div');

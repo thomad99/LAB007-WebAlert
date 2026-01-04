@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Web Alert Status</title>
-    <link rel="stylesheet" href="/src/styles/status.css">
+    <link rel="stylesheet" href="src/styles/status.css">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -235,11 +235,14 @@
         // Function to load status data
         async function loadStatus() {
             try {
-                const response = await fetch('/api/status');
+                console.log('Loading status data...');
+                const response = await fetch('api/status');
+                console.log('Status response:', response.status, response.statusText);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 const data = await response.json();
+                console.log('Status data received:', data);
                 
                 const statusTableBody = document.getElementById('statusTableBody');
                 statusTableBody.innerHTML = '';
@@ -310,7 +313,7 @@
         // Function to stop all monitoring
         async function stopAllMonitoring() {
             try {
-                const response = await fetch('/api/stop-all-monitoring', {
+                const response = await fetch('api/stop-all-monitoring', {
                     method: 'POST'
                 });
                 const result = await response.json();
@@ -325,7 +328,7 @@
         // Function to clear history
         async function clearHistory() {
             try {
-                const response = await fetch('/api/clear-history', {
+                const response = await fetch('api/clear-history', {
                     method: 'POST'
                 });
                 const result = await response.json();
@@ -351,7 +354,7 @@
                 'Are you sure you want to stop monitoring this URL?',
                 async () => {
                     try {
-                        const response = await fetch(`/api/stop-monitoring/${id}`, {
+                        const response = await fetch(`api/stop-monitoring/${id}`, {
                             method: 'POST'
                         });
                         const result = await response.json();

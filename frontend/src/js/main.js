@@ -54,6 +54,7 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
         <p>🔗 URL: ${formData.websiteUrl}</p>
         <p>📧 Email: ${formData.email}</p>
         <p>📱 Phone: ${formData.phone || 'Not provided (email only)'}</p>
+        <p>🔄 Polling Interval: ${formData.pollingInterval} minutes</p>
         <p>⏱️ Duration: ${formData.duration} minutes</p>
     `;
     document.getElementById('statusBox').classList.add('status-active');
@@ -62,7 +63,7 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
         console.log('Sending form data:', formData);
         statusBox.innerHTML += '<p>📡 Connecting to server...</p>';
         
-        const response = await fetch('/api/monitor', {
+        const response = await fetch('api/monitor', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -72,6 +73,13 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
 
         statusBox.innerHTML += '<p>⌛ Processing response...</p>';
         
+        // Check if response is JSON before parsing
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await response.text();
+            throw new Error(`Server returned ${response.status}: ${text.substring(0, 200)}`);
+        }
+        
         const data = await response.json();
         console.log('Server response:', data);
         
@@ -80,10 +88,11 @@ document.getElementById('alertForm').addEventListener('submit', async (e) => {
                 <p>✅ Success! Monitoring started</p>
                 <p>🆔 Alert ID: ${data.data.subscriber.id}</p>
                 <p>🔗 URL: ${formData.websiteUrl}</p>
+                <p>🔄 Polling Interval: ${formData.pollingInterval} minutes</p>
                 <p>⏱️ Duration: ${formData.duration} minutes</p>
                 <p>📧 Email: ${formData.email}</p>
                 <p>📱 Phone: ${formData.phone ? formatPhoneNumber(formData.phone) : 'Not provided (email only)'}</p>
-                <p>🔄 First check will begin in about 1 minute</p>
+                <p>🔄 First check will begin in about ${formData.pollingInterval} minute(s)</p>
                 <p><a href="/status.html" class="status-link">View All Monitoring Tasks</a></p>
             `;
             e.target.reset();
